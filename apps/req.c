@@ -547,8 +547,13 @@ int req_main(int argc, char **argv)
         if (ext_copy == EXT_COPY_NONE)
             BIO_printf(bio_err, "Ignoring -copy_extensions 'none' when -x509 is not given\n");
     }
-    if (gen_x509 && infile == NULL)
-        newreq = 1;
+    if (infile == NULL) {
+        if (gen_x509)
+            newreq = 1;
+        else
+            BIO_printf(bio_err,
+                       "Warning: Will read cert request from stdin since no -in option is given\n");
+    }
 
     if (!app_passwd(passargin, passargout, &passin, &passout)) {
         BIO_printf(bio_err, "Error getting passwords\n");
@@ -689,6 +694,11 @@ int req_main(int argc, char **argv)
             goto end;
         app_RAND_load_conf(req_conf, section);
     }
+    if (keyalg != NULL && pkey != NULL) {
+        BIO_printf(bio_err,
+                   "Warning: Not generating key via given -newkey option since -key is given\n");
+        /* Better throw an error in this case */
+    }
     if (newreq && pkey == NULL) {
         app_RAND_load_conf(req_conf, section);
 
@@ -800,10 +810,17 @@ int req_main(int argc, char **argv)
         goto end;
 
     if (!newreq) {
+        if (keyfile != NULL)
+            BIO_printf(bio_err,
+                       "Warning: Not placing -key in cert or request since request is used\n");
         req = load_csr(infile /* if NULL, reads from stdin */,
                        informat, "X509 request");
         if (req == NULL)
             goto end;
+    } else if (infile != NULL) {
+        BIO_printf(bio_err,
+                   "Warning: Ignoring -in option since -new or -newkey or -precert is given\n");
+        /* Better throw an error in this case, as done in the x509 app */
     }
 
     if (CAkeyfile == NULL)
@@ -858,6 +875,10 @@ int req_main(int argc, char **argv)
                 X509_REQ_get_subject_name(req);
             X509_NAME *n_subj = fsubj != NULL ? fsubj :
                 X509_REQ_get_subject_name(req);
+
+            if (CAcert != NULL && keyfile != NULL)
+                BIO_printf(bio_err,
+                           "Warning: Not using -key or -newkey for signing since -CA option is given\n");
 
             if ((new_x509 = X509_new_ex(app_get0_libctx(),
                                         app_get0_propq())) == NULL)
@@ -934,6 +955,11 @@ int req_main(int argc, char **argv)
                 goto end;
         } else {
             X509V3_CTX ext_ctx;
+
+            if (precert) {
+                BIO_printf(bio_err,
+                           "Warning: Ignoring -precert flag since no cert is produced\n");
+            }
 
             /* Set up V3 context struct */
             X509V3_set_ctx(&ext_ctx, NULL, NULL, req, NULL, 0);
