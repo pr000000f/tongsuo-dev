@@ -6,6 +6,7 @@ $HKDF_GOAL=../../libdefault.a ../../libfips.a
 $KBKDF_GOAL=../../libdefault.a ../../libfips.a
 $KRB5KDF_GOAL=../../libdefault.a
 $PBKDF1_GOAL=../../liblegacy.a
+$PBKDF2_GOAL=../../libdefault.a ../../libfips.a
 $PVKKDF_GOAL=../../liblegacy.a
 $PKCS12KDF_GOAL=../../libdefault.a
 $SSKDF_GOAL=../../libdefault.a ../../libfips.a
