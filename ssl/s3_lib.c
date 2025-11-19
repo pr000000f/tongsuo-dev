@@ -108,9 +108,9 @@ static SSL_CIPHER tls13_ciphers[] = {
         SSL_AEAD,
         TLS1_3_VERSION, TLS1_3_VERSION,
         0, 0,
-        SSL_NOT_DEFAULT | SSL_HIGH,
+        SSL_NOT_DEFAULT | SSL_MEDIUM,
         SSL_HANDSHAKE_MAC_SHA256,
-        128,
+        64, /* CCM8 uses a short tag, so we have a low security strength */
         128,
     },
 #if (!defined OPENSSL_NO_SM2) && (!defined OPENSSL_NO_SM3) \
@@ -734,9 +734,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     128,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      128,
      },
     {
@@ -750,9 +750,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     256,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      256,
      },
     {
@@ -766,9 +766,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     128,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      128,
      },
     {
@@ -782,9 +782,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     256,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      256,
      },
     {
@@ -862,9 +862,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     128,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      128,
      },
     {
@@ -878,9 +878,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     256,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      256,
      },
     {
@@ -894,9 +894,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     128,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      128,
      },
     {
@@ -910,9 +910,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     256,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      256,
      },
     {
@@ -958,9 +958,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     128,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      128,
      },
     {
@@ -974,9 +974,9 @@ static SSL_CIPHER ssl3_ciphers[] = {
      SSL_AEAD,
      TLS1_2_VERSION, TLS1_2_VERSION,
      DTLS1_2_VERSION, DTLS1_2_VERSION,
-     SSL_NOT_DEFAULT | SSL_HIGH,
+     SSL_NOT_DEFAULT | SSL_MEDIUM,
      SSL_HANDSHAKE_MAC_SHA256 | TLS1_PRF_SHA256,
-     256,
+     64, /* CCM8 uses a short tag, so we have a low security strength */
      256,
      },
     {
