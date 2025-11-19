@@ -721,7 +721,7 @@ typedef enum OPTION_choice {
 #ifndef OPENSSL_NO_CERT_COMPRESSION
     OPT_CERT_COMP,
 #endif
-    OPT_HTTP_SERVER_BINMODE, OPT_NOCANAMES, OPT_IGNORE_UNEXPECTED_EOF,
+    OPT_HTTP_SERVER_BINMODE, OPT_NOCANAMES, OPT_IGNORE_UNEXPECTED_EOF, OPT_KTLS,
     OPT_R_ENUM,
     OPT_S_ENUM,
     OPT_V_ENUM,
@@ -1001,6 +1001,7 @@ const OPTIONS s_server_options[] = {
     {"alpn", OPT_ALPN, 's',
      "Set the advertised protocols for the ALPN extension (comma-separated list)"},
 #ifndef OPENSSL_NO_KTLS
+    {"ktls", OPT_KTLS, '-', "Enable Kernel TLS for sending and receiving"},
     {"sendfile", OPT_SENDFILE, '-', "Use sendfile to response file with -WWW"},
 #endif
 #ifndef OPENSSL_NO_CERT_COMPRESSION
@@ -1140,6 +1141,9 @@ int s_server_main(int argc, char *argv[])
     int enable_verify_peer_by_dc = 0;
     const char *s_delegated_credential_file = NULL;
     const char *s_delegated_credential_pkey_file = NULL;
+#endif
+#ifndef OPENSSL_NO_KTLS
+    int enable_ktls = 0;
 #endif
     /* Init of few remaining global variables */
     local_argc = argc;
@@ -1817,6 +1821,11 @@ int s_server_main(int argc, char *argv[])
         case OPT_NOCANAMES:
             no_ca_names = 1;
             break;
+        case OPT_KTLS:
+#ifndef OPENSSL_NO_KTLS
+            enable_ktls = 1;
+#endif
+            break;
         case OPT_SENDFILE:
 #ifndef OPENSSL_NO_KTLS
             use_sendfile = 1;
@@ -1884,6 +1893,11 @@ int s_server_main(int argc, char *argv[])
 #endif
 
 #ifndef OPENSSL_NO_KTLS
+    if (use_sendfile && enable_ktls == 0) {
+        BIO_printf(bio_out, "Warning: -sendfile depends on -ktls, enabling -ktls now.\n");
+        enable_ktls = 1;
+    }
+
     if (use_sendfile && www <= 1) {
         BIO_printf(bio_err, "Can't use -sendfile without -WWW or -HTTP\n");
         goto end;
@@ -2210,6 +2224,11 @@ skip:
 
     if (ignore_unexpected_eof)
         SSL_CTX_set_options(ctx, SSL_OP_IGNORE_UNEXPECTED_EOF);
+
+#ifndef OPENSSL_NO_KTLS
+    if (enable_ktls)
+        SSL_CTX_set_options(ctx, SSL_OP_ENABLE_KTLS);
+#endif
 
     if (max_send_fragment > 0
         && !SSL_CTX_set_max_send_fragment(ctx, max_send_fragment)) {
