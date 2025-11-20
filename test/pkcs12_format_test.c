@@ -419,7 +419,7 @@ static int test_single_key_enc_iter(int z)
 static int test_single_key_with_attrs(void)
 {
     PKCS12_BUILDER *pb = new_pkcs12_builder("1keyattrs.p12");
-    
+
     /* Generate/encode */
     start_pkcs12(pb);
 
@@ -515,7 +515,7 @@ static int test_single_cert_mac_iter(int z)
 static int test_cert_key_with_attrs_and_mac(void)
 {
     PKCS12_BUILDER *pb = new_pkcs12_builder("1cert1key.p12");
-    
+
     /* Generate/encode */
     start_pkcs12(pb);
 
@@ -546,7 +546,7 @@ static int test_cert_key_with_attrs_and_mac(void)
 static int test_cert_key_encrypted_content(void)
 {
     PKCS12_BUILDER *pb = new_pkcs12_builder("1cert1key_enc.p12");
-    
+
     /* Generate/encode */
     start_pkcs12(pb);
 
@@ -578,7 +578,7 @@ static int test_single_secret_encrypted_content(void)
 {
     PKCS12_BUILDER *pb = new_pkcs12_builder("1secret.p12");
     int custom_nid = get_custom_oid();
-    
+
     /* Generate/encode */
     start_pkcs12(pb);
 
