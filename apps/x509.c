@@ -876,6 +876,10 @@ int x509_main(int argc, char **argv)
             goto end;
         if (!X509_set_issuer_name(x, X509_get_subject_name(issuer_cert)))
             goto end;
+    } else {
+        if (privkey != NULL && !cert_matches_key(x, privkey))
+            BIO_printf(bio_err,
+                       "Warning: Signature key and public key of cert do not match\n");
     }
 
     X509V3_set_ctx(&ext_ctx, issuer_cert, x, NULL, NULL, X509V3_CTX_REPLACE);
