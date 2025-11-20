@@ -27,8 +27,6 @@ plan skip_all => "$test_name needs NTLS enabled"
 plan skip_all => "$test_name needs SM2, SM3 and SM4 enabled"
     if disabled("sm2") || disabled("sm3") || disabled("sm4");
 
-$ENV{OPENSSL_ia32cap} = '~0x200000200000000';
-
 my $no_smtc = disabled('smtc') || disabled('smtc-debug');
 if (!$no_smtc) {
     $ENV{OPENSSL_CONF} = srctop_file("test", "smtc.cnf");
