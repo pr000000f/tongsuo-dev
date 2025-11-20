@@ -19,11 +19,11 @@ client = 0-ct-permissive-without-scts-client
 
 [0-ct-permissive-without-scts-server]
 Certificate = ${ENV::TEST_CERTS_DIR}/servercert.pem
-CipherString = DEFAULT
+CipherString = DEFAULT@SECLEVEL=1
 PrivateKey = ${ENV::TEST_CERTS_DIR}/serverkey.pem
 
 [0-ct-permissive-without-scts-client]
-CipherString = DEFAULT
+CipherString = DEFAULT@SECLEVEL=1
 VerifyCAFile = ${ENV::TEST_CERTS_DIR}/rootcert.pem
 VerifyMode = Peer
 
