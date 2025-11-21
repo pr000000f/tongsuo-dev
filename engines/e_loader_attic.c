@@ -14,7 +14,7 @@
 /* We need to use some engine deprecated APIs */
 #define OPENSSL_SUPPRESS_DEPRECATED
 
-#include "../e_os.h" /* for stat and strncasecmp */
+#include "internal/e_os.h" /* for stat and strncasecmp */
 #include <string.h>
 #include <sys/stat.h>
 #include <ctype.h>
@@ -941,7 +941,6 @@ static int file_find_type(OSSL_STORE_LOADER_CTX *ctx)
     return 1;
 }
 
-/* This function has quite some overlap with providers/implementations/storemgmt/file_store.c */
 static OSSL_STORE_LOADER_CTX *file_open_ex
     (const OSSL_STORE_LOADER *loader, const char *uri,
      OSSL_LIB_CTX *libctx, const char *propq,
