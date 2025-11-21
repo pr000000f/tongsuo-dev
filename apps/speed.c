@@ -2559,8 +2559,8 @@ int speed_main(int argc, char **argv)
         if (strcmp(algo, "openssl") == 0) /* just for compatibility */
             continue;
 #endif
-        if (strncmp(algo, "rsa", 3) == 0) {
-            if (algo[3] == '\0') {
+        if (HAS_PREFIX(algo, "rsa")) {
+            if (algo[sizeof("rsa") - 1] == '\0') {
                 memset(rsa_doit, 1, sizeof(rsa_doit));
                 continue;
             }
@@ -2570,8 +2570,8 @@ int speed_main(int argc, char **argv)
             }
         }
 #ifndef OPENSSL_NO_DH
-        if (strncmp(algo, "ffdh", 4) == 0) {
-            if (algo[4] == '\0') {
+        if (HAS_PREFIX(algo, "ffdh")) {
+            if (algo[sizeof("ffdh") - 1] == '\0') {
                 memset(ffdh_doit, 1, sizeof(ffdh_doit));
                 continue;
             }
@@ -2581,8 +2581,8 @@ int speed_main(int argc, char **argv)
             }
         }
 #endif
-        if (strncmp(algo, "dsa", 3) == 0) {
-            if (algo[3] == '\0') {
+        if (HAS_PREFIX(algo, "dsa")) {
+            if (algo[sizeof("dsa") - 1] == '\0') {
                 memset(dsa_doit, 1, sizeof(dsa_doit));
                 continue;
             }
@@ -2595,8 +2595,8 @@ int speed_main(int argc, char **argv)
             doit[D_CBC_128_AES] = doit[D_CBC_192_AES] = doit[D_CBC_256_AES] = 1;
             continue;
         }
-        if (strncmp(algo, "ecdsa", 5) == 0) {
-            if (algo[5] == '\0') {
+        if (HAS_PREFIX(algo, "ecdsa")) {
+            if (algo[sizeof("ecdsa") - 1] == '\0') {
                 memset(ecdsa_doit, 1, sizeof(ecdsa_doit));
                 continue;
             }
@@ -2605,8 +2605,8 @@ int speed_main(int argc, char **argv)
                 continue;
             }
         }
-        if (strncmp(algo, "ecdh", 4) == 0) {
-            if (algo[4] == '\0') {
+        if (HAS_PREFIX(algo, "ecdh")) {
+            if (algo[sizeof("ecdh") - 1] == '\0') {
                 memset(ecdh_doit, 1, sizeof(ecdh_doit));
                 continue;
             }
@@ -5996,20 +5996,19 @@ static int do_multi(int multi, int size_num)
                 continue;
             }
             printf("Got: %s from %d\n", buf, n);
-            if (strncmp(buf, "+F:", 3) == 0) {
+            p = buf;
+            if (CHECK_AND_SKIP_PREFIX(p, "+F:")) {
                 int alg;
                 int j;
 
-                p = buf + 3;
                 alg = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
                 for (j = 0; j < size_num; ++j)
                     results[alg][j] += atof(sstrsep(&p, sep));
-            } else if (strncmp(buf, "+F2:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F2:")) {
                 int k;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
 
@@ -6018,11 +6017,10 @@ static int do_multi(int multi, int size_num)
 
                 d = atof(sstrsep(&p, sep));
                 rsa_results[k][1] += d;
-            } else if (strncmp(buf, "+F3:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F3:")) {
                 int k;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
 
@@ -6031,11 +6029,10 @@ static int do_multi(int multi, int size_num)
 
                 d = atof(sstrsep(&p, sep));
                 dsa_results[k][1] += d;
-            } else if (strncmp(buf, "+F4:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F4:")) {
                 int k;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
 
@@ -6044,21 +6041,19 @@ static int do_multi(int multi, int size_num)
 
                 d = atof(sstrsep(&p, sep));
                 ecdsa_results[k][1] += d;
-            } else if (strncmp(buf, "+F5:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F5:")) {
                 int k;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
 
                 d = atof(sstrsep(&p, sep));
                 ecdh_results[k][0] += d;
-            } else if (strncmp(buf, "+F6:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F6:")) {
                 int k;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
                 sstrsep(&p, sep);
@@ -6069,11 +6064,10 @@ static int do_multi(int multi, int size_num)
                 d = atof(sstrsep(&p, sep));
                 eddsa_results[k][1] += d;
 # ifndef OPENSSL_NO_SM2
-            } else if (strncmp(buf, "+F7:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F7:")) {
                 int k;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
                 sstrsep(&p, sep);
@@ -6085,11 +6079,10 @@ static int do_multi(int multi, int size_num)
                 sm2_results[k][1] += d;
 # endif /* OPENSSL_NO_SM2 */
 # ifndef OPENSSL_NO_DH
-            } else if (strncmp(buf, "+F8:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F8:")) {
                 int k;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
 
@@ -6097,11 +6090,10 @@ static int do_multi(int multi, int size_num)
                 ffdh_results[k][0] += d;
 # endif /* OPENSSL_NO_DH */
 # ifndef OPENSSL_NO_EC_ELGAMAL
-            } else if (strncmp(buf, "+F9:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F9:")) {
                 int k;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
 
@@ -6110,11 +6102,10 @@ static int do_multi(int multi, int size_num)
 
                 d = atof(sstrsep(&p, sep));
                 ec_elgamal_results[k][1][0] += d;
-            } else if (strncmp(buf, "+F10:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F10:")) {
                 int k, j;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 j = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
@@ -6137,11 +6128,10 @@ static int do_multi(int multi, int size_num)
                 ec_elgamal_results[k][j][5] += d;
 # endif /* OPENSSL_NO_EC_ELGAMAL */
 # ifndef OPENSSL_NO_PAILLIER
-            } else if (strncmp(buf, "+F11:", 4) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+F11:")) {
                 int k, j;
                 double d;
 
-                p = buf + 4;
                 k = atoi(sstrsep(&p, sep));
                 j = atoi(sstrsep(&p, sep));
                 sstrsep(&p, sep);
@@ -6163,7 +6153,7 @@ static int do_multi(int multi, int size_num)
                 d = atof(sstrsep(&p, sep));
                 paillier_results[k][j][5] += d;
 # endif /* OPENSSL_NO_PAILLIER */
-            } else if (strncmp(buf, "+H:", 3) == 0) {
+            } else if (CHECK_AND_SKIP_PREFIX(p, "+H:")) {
                 ;
             } else {
                 BIO_printf(bio_err, "Unknown type '%s' from child %d\n", buf,

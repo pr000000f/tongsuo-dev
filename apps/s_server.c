@@ -3434,7 +3434,7 @@ static void print_connection_info(SSL *con)
 
 static int www_body(int s, int stype, int prot, unsigned char *context)
 {
-    char *buf = NULL;
+    char *buf = NULL, *p;
     int ret = 1;
     int i, j, k, dot;
     SSL *con;
@@ -3458,7 +3458,7 @@ static int www_body(int s, int stype, int prot, unsigned char *context)
 
     /* as we use BIO_gets(), and it always null terminates data, we need
      * to allocate 1 byte longer buffer to fit the full 2^14 byte record */
-    buf = app_malloc(bufsize + 1, "server www buffer");
+    p = buf = app_malloc(bufsize + 1, "server www buffer");
     io = BIO_new(BIO_f_buffer());
     ssl_bio = BIO_new(BIO_f_ssl());
     if ((io == NULL) || (ssl_bio == NULL))
@@ -3565,15 +3565,14 @@ static int www_body(int s, int stype, int prot, unsigned char *context)
         }
 
         /* else we have data */
-        if (((www == 1) && (strncmp("GET ", buf, 4) == 0)) ||
-            ((www == 2) && (strncmp("GET /stats ", buf, 11) == 0))) {
-            char *p;
+        if ((www == 1 && HAS_PREFIX(buf, "GET "))
+             || (www == 2 && HAS_PREFIX(buf, "GET /stats "))) {
             X509 *peer = NULL;
             STACK_OF(SSL_CIPHER) *sk;
             static const char *space = "                          ";
 
-            if (www == 1 && strncmp("GET /reneg", buf, 10) == 0) {
-                if (strncmp("GET /renegcert", buf, 14) == 0)
+            if (www == 1 && HAS_PREFIX(buf, "GET /reneg")) {
+                if (HAS_PREFIX(buf, "GET /renegcert"))
                     SSL_set_verify(con,
                                    SSL_VERIFY_PEER | SSL_VERIFY_CLIENT_ONCE,
                                    NULL);
@@ -3614,6 +3613,7 @@ static int www_body(int s, int stype, int prot, unsigned char *context)
             BIO_puts(io, "\n");
             for (i = 0; i < local_argc; i++) {
                 const char *myp;
+
                 for (myp = local_argv[i]; *myp; myp++)
                     switch (*myp) {
                     case '<':
@@ -3701,15 +3701,11 @@ static int www_body(int s, int stype, int prot, unsigned char *context)
             }
             BIO_puts(io, "</pre></BODY></HTML>\r\n\r\n");
             break;
-        } else if ((www == 2 || www == 3)
-                   && (strncmp("GET /", buf, 5) == 0)) {
+        } else if ((www == 2 || www == 3) && HAS_PREFIX(p, "GET /")) {
             BIO *file;
-            char *p, *e;
+            char *e;
             static const char *text =
                 "HTTP/1.0 200 ok\r\nContent-type: text/plain\r\n\r\n";
-
-            /* skip the '/' */
-            p = &(buf[5]);
 
             dot = 1;
             for (e = p; *e != '\0'; e++) {
@@ -4022,7 +4018,7 @@ static int rev_body(int s, int stype, int prot, unsigned char *context)
                 p--;
                 i--;
             }
-            if (!s_ign_eof && (i == 5) && (strncmp(buf, "CLOSE", 5) == 0)) {
+            if (!s_ign_eof && i == 5 && HAS_PREFIX(buf, "CLOSE")) {
                 ret = 1;
                 BIO_printf(bio_err, "CONNECTION CLOSED\n");
                 goto end;

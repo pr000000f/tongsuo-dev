@@ -8,10 +8,10 @@
  */
 
 #include <stddef.h>
-#include <string.h>
 #include <stdio.h>
 #include <openssl/e_os2.h>
 #include "crypto/punycode.h"
+#include "internal/cryptlib.h" /* for HAS_PREFIX */
 
 static const unsigned int base = 36;
 static const unsigned int tmin = 1;
@@ -278,7 +278,7 @@ int ossl_a2ulabel(const char *in, char *out, size_t *outlen)
         char *tmpptr = strchr(inptr, '.');
         size_t delta = tmpptr != NULL ? (size_t)(tmpptr - inptr) : strlen(inptr);
 
-        if (strncmp(inptr, "xn--", 4) != 0) {
+        if (!HAS_PREFIX(inptr, "xn--")) {
             for (i = 0; i < delta + 1; i++)
                 PUSHC(inptr[i]);
         } else {
