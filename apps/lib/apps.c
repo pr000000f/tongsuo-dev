@@ -683,8 +683,8 @@ int load_cert_certs(const char *uri,
     int ret = 0;
     char *pass_string;
 
-    if (exclude_http && (OPENSSL_strncasecmp(uri, "http://", 7) == 0
-                         || OPENSSL_strncasecmp(uri, "https://", 8) == 0)) {
+    if (exclude_http && (HAS_CASE_PREFIX(uri, "http://")
+                         || HAS_CASE_PREFIX(uri, "https://"))) {
         BIO_printf(bio_err, "error: HTTP retrieval not allowed for %s\n", desc);
         return ret;
     }

@@ -14,6 +14,7 @@
 /* We need to use some engine deprecated APIs */
 #define OPENSSL_SUPPRESS_DEPRECATED
 
+#include "../e_os.h" /* for stat and strncasecmp */
 #include <string.h>
 #include <sys/stat.h>
 #include <ctype.h>
@@ -41,9 +42,6 @@
 
 DEFINE_STACK_OF(OSSL_STORE_INFO)
 
-#ifdef _WIN32
-# define stat _stat
-#endif
 
 #ifndef S_ISDIR
 # define S_ISDIR(a) (((a) & S_IFMT) == S_IFDIR)
@@ -943,6 +941,7 @@ static int file_find_type(OSSL_STORE_LOADER_CTX *ctx)
     return 1;
 }
 
+/* This function has quite some overlap with providers/implementations/storemgmt/file_store.c */
 static OSSL_STORE_LOADER_CTX *file_open_ex
     (const OSSL_STORE_LOADER *loader, const char *uri,
      OSSL_LIB_CTX *libctx, const char *propq,
@@ -955,7 +954,7 @@ static OSSL_STORE_LOADER_CTX *file_open_ex
         unsigned int check_absolute:1;
     } path_data[2];
     size_t path_data_n = 0, i;
-    const char *path;
+    const char *path, *p = uri, *q;
 
     /*
      * First step, just take the URI as is.
@@ -964,20 +963,18 @@ static OSSL_STORE_LOADER_CTX *file_open_ex
     path_data[path_data_n++].path = uri;
 
     /*
-     * Second step, if the URI appears to start with the 'file' scheme,
+     * Second step, if the URI appears to start with the "file" scheme,
      * extract the path and make that the second path to check.
      * There's a special case if the URI also contains an authority, then
      * the full URI shouldn't be used as a path anywhere.
      */
-    if (OPENSSL_strncasecmp(uri, "file:", 5) == 0) {
-        const char *p = &uri[5];
-
-        if (strncmp(&uri[5], "//", 2) == 0) {
+    if (CHECK_AND_SKIP_CASE_PREFIX(p, "file:")) {
+        q = p;
+        if (CHECK_AND_SKIP_PREFIX(q, "//")) {
             path_data_n--;           /* Invalidate using the full URI */
-            if (OPENSSL_strncasecmp(&uri[7], "localhost/", 10) == 0) {
-                p = &uri[16];
-            } else if (uri[7] == '/') {
-                p = &uri[7];
+            if (CHECK_AND_SKIP_CASE_PREFIX(q, "localhost/")
+                    || CHECK_AND_SKIP_PREFIX(q, "/")) {
+                p = q - 1;
             } else {
                 ATTICerr(0, ATTIC_R_URI_AUTHORITY_UNSUPPORTED);
                 return NULL;
@@ -986,7 +983,7 @@ static OSSL_STORE_LOADER_CTX *file_open_ex
 
         path_data[path_data_n].check_absolute = 1;
 #ifdef _WIN32
-        /* Windows file: URIs with a drive letter start with a / */
+        /* Windows "file:" URIs with a drive letter start with a '/' */
         if (p[0] == '/' && p[2] == ':' && p[3] == '/') {
             char c = tolower(p[1]);
 

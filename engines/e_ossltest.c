@@ -27,6 +27,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "internal/cryptlib.h"
 
 #include <openssl/engine.h>
 #include <openssl/sha.h>
@@ -418,9 +419,8 @@ static EVP_PKEY *load_key(ENGINE *eng, const char *key_id, int pub,
     BIO *in;
     EVP_PKEY *key;
 
-    if (OPENSSL_strncasecmp(key_id, "ot:", 3) != 0)
+    if (!CHECK_AND_SKIP_CASE_PREFIX(key_id, "ot:"))
         return NULL;
-    key_id += 3;
 
     fprintf(stderr, "[ossltest]Loading %s key %s\n",
             pub ? "Public" : "Private", key_id);

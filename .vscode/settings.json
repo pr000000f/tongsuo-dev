@@ -1,5 +1,14 @@
 {
     "files.associations": {
-        "testutil.h": "c"
+        "testutil.h": "c",
+        "*.inc": "c",
+        "array": "c",
+        "chrono": "c",
+        "compare": "c",
+        "functional": "c",
+        "ratio": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c"
     }
 }
