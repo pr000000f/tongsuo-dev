@@ -934,7 +934,7 @@ void SSL_SESSION_free(SSL_SESSION *ss)
 #ifndef OPENSSL_NO_DELEGATED_CREDENTIAL
     DC_free(ss->peer_dc);
 #endif
-    sk_X509_pop_free(ss->peer_chain, X509_free);
+    OSSL_STACK_OF_X509_free(ss->peer_chain);
     OPENSSL_free(ss->ext.hostname);
     OPENSSL_free(ss->ext.tick);
 #ifndef OPENSSL_NO_PSK

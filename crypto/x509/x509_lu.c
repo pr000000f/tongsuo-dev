@@ -633,7 +633,7 @@ STACK_OF(X509) *X509_STORE_get1_all_certs(X509_STORE *store)
  err:
     X509_STORE_unlock(store);
  out_free:
-    sk_X509_pop_free(sk, X509_free);
+    OSSL_STACK_OF_X509_free(sk);
     return NULL;
 }
 
@@ -684,7 +684,7 @@ STACK_OF(X509) *X509_STORE_CTX_get1_certs(X509_STORE_CTX *ctx,
         x = obj->data.x509;
         if (!X509_add_cert(sk, x, X509_ADD_FLAG_UP_REF)) {
             X509_STORE_unlock(store);
-            sk_X509_pop_free(sk, X509_free);
+            OSSL_STACK_OF_X509_free(sk);
             return NULL;
         }
     }

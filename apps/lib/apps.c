@@ -701,7 +701,7 @@ int load_cert_certs(const char *uri,
             warn_certs(uri, *pcerts, 1, vpm);
     } else {
         if (pcerts != NULL) {
-            sk_X509_pop_free(*pcerts, X509_free);
+            OSSL_STACK_OF_X509_free(*pcerts);
             *pcerts = NULL;
         }
     }
@@ -727,7 +727,7 @@ STACK_OF(X509) *load_certs_multifile(char *files, const char *pass,
         if (!X509_add_certs(result, certs,
                             X509_ADD_FLAG_UP_REF | X509_ADD_FLAG_NO_DUP))
             goto oom;
-        sk_X509_pop_free(certs, X509_free);
+        OSSL_STACK_OF_X509_free(certs);
         certs = NULL;
         files = next;
     }
@@ -736,8 +736,8 @@ STACK_OF(X509) *load_certs_multifile(char *files, const char *pass,
  oom:
     BIO_printf(bio_err, "out of memory\n");
  err:
-    sk_X509_pop_free(certs, X509_free);
-    sk_X509_pop_free(result, X509_free);
+    OSSL_STACK_OF_X509_free(certs);
+    OSSL_STACK_OF_X509_free(result);
     return NULL;
 }
 
@@ -778,7 +778,7 @@ X509_STORE *load_certstore(char *input, const char *pass, const char *desc,
             return NULL;
         }
         ok = (store = sk_X509_to_store(store, certs)) != NULL;
-        sk_X509_pop_free(certs, X509_free);
+        OSSL_STACK_OF_X509_free(certs);
         certs = NULL;
         if (!ok)
             return NULL;
@@ -800,7 +800,7 @@ int load_certs(const char *uri, int maybe_stdin, STACK_OF(X509) **certs,
                                   NULL, NULL, certs, NULL, NULL);
 
     if (!ret && was_NULL) {
-        sk_X509_pop_free(*certs, X509_free);
+        OSSL_STACK_OF_X509_free(*certs);
         *certs = NULL;
     }
     return ret;

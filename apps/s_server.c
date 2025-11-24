@@ -2640,8 +2640,8 @@ skip:
     EVP_PKEY_free(s_enc_key2);
     EVP_PKEY_free(s_sign_key2);
 #endif
-    sk_X509_pop_free(s_chain, X509_free);
-    sk_X509_pop_free(s_dchain, X509_free);
+    OSSL_STACK_OF_X509_free(s_chain);
+    OSSL_STACK_OF_X509_free(s_dchain);
     OPENSSL_free(pass);
     OPENSSL_free(dpass);
     OPENSSL_free(host);
