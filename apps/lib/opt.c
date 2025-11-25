@@ -41,6 +41,7 @@ static int opt_index;
 static char *arg;
 static char *flag;
 static char *dunno;
+static const char *unknown_name;
 static const OPTIONS *unknown;
 static const OPTIONS *opts;
 static char prog[40];
@@ -136,7 +137,6 @@ char *opt_init(int ac, char **av, const OPTIONS *o)
     opt_begin();
     opts = o;
     unknown = NULL;
-
     /* Make sure prog name is set for usage output */
     (void)opt_progname(argv[0]);
 
@@ -185,6 +185,7 @@ char *opt_init(int ac, char **av, const OPTIONS *o)
         }
 #endif
         if (o->name[0] == '\0') {
+            OPENSSL_assert(unknown_name != NULL);
             OPENSSL_assert(unknown == NULL);
             unknown = o;
             OPENSSL_assert(unknown->valtype == 0 || unknown->valtype == '-');
@@ -205,6 +206,11 @@ static OPT_PAIR formats[] = {
     {"pvk", OPT_FMT_PVK},
     {NULL}
 };
+
+void opt_set_unknown_name(const char *name)
+{
+    unknown_name = name;
+}
 
 /* Print an error message about a failed format parse. */
 static int opt_format_error(const char *s, unsigned long flags)
@@ -955,6 +961,11 @@ int opt_next(void)
         return o->retval;
     }
     if (unknown != NULL) {
+        if (dunno != NULL) {
+            opt_printf_stderr("%s: Multiple %s or unknown options: -%s and -%s\n",
+                              prog, unknown_name, dunno, p);
+            return -1;
+        }
         dunno = p;
         return unknown->retval;
     }
@@ -978,6 +989,12 @@ char *opt_flag(void)
 char *opt_unknown(void)
 {
     return dunno;
+}
+
+/* Reset the unknown option; needed by ocsp to allow multiple digest options. */
+void reset_unknown(void)
+{
+    dunno = NULL;
 }
 
 /* Return the rest of the arguments after parsing flags. */
