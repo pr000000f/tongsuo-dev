@@ -4,6 +4,7 @@
         "*.inc": "c",
         "evp.h": "c",
         "dsa.h": "c",
-        "bio.h": "c"
+        "bio.h": "c",
+        "pem.h": "c"
     }
 }
