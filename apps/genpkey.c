@@ -19,7 +19,6 @@ static int quiet;
 
 static int init_keygen_file(EVP_PKEY_CTX **pctx, const char *file, ENGINE *e,
                             OSSL_LIB_CTX *libctx, const char *propq);
-static int genpkey_cb(EVP_PKEY_CTX *ctx);
 
 typedef enum OPTION_choice {
     OPT_COMMON,
@@ -181,7 +180,8 @@ int genpkey_main(int argc, char **argv)
     if (out == NULL)
         goto end;
 
-    EVP_PKEY_CTX_set_cb(ctx, genpkey_cb);
+    if (!quiet)
+        EVP_PKEY_CTX_set_cb(ctx, progress_cb);
     EVP_PKEY_CTX_set_app_data(ctx, bio_err);
 
     pkey = do_param ? app_paramgen(ctx, algname)
@@ -317,29 +317,4 @@ int init_gen_str(EVP_PKEY_CTX **pctx,
     EVP_PKEY_CTX_free(ctx);
     return 0;
 
-}
-
-static int genpkey_cb(EVP_PKEY_CTX *ctx)
-{
-    char c = '*';
-    BIO *b = EVP_PKEY_CTX_get_app_data(ctx);
-
-    if (quiet)
-        return 1;
-
-    switch (EVP_PKEY_CTX_get_keygen_info(ctx, 0)) {
-    case 0:
-        c = '.';
-        break;
-    case 1:
-        c = '+';
-        break;
-    case 3:
-        c = '\n';
-        break;
-    }
-
-    BIO_write(b, &c, 1);
-    (void)BIO_flush(b);
-    return 1;
 }

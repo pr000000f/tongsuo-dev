@@ -31,7 +31,6 @@
 #define DEFBITS 2048
 
 static EVP_PKEY *dsa_to_dh(EVP_PKEY *dh);
-static int gendh_cb(EVP_PKEY_CTX *ctx);
 
 typedef enum OPTION_choice {
     OPT_COMMON,
@@ -192,7 +191,7 @@ int dhparam_main(int argc, char **argv)
                         alg);
             goto end;
         }
-        EVP_PKEY_CTX_set_cb(ctx, gendh_cb);
+        EVP_PKEY_CTX_set_cb(ctx, progress_cb);
         EVP_PKEY_CTX_set_app_data(ctx, bio_err);
         BIO_printf(bio_err,
                     "Generating %s parameters, %d bit long %sprime\n",
@@ -401,16 +400,4 @@ static EVP_PKEY *dsa_to_dh(EVP_PKEY *dh)
     BN_free(bn_q);
     BN_free(bn_g);
     return pkey;
-}
-
-static int gendh_cb(EVP_PKEY_CTX *ctx)
-{
-    int p = EVP_PKEY_CTX_get_keygen_info(ctx, 0);
-    BIO *b = EVP_PKEY_CTX_get_app_data(ctx);
-    static const char symbols[] = ".+*\n";
-    char c = (p >= 0 && (size_t)p < sizeof(symbols) - 1) ? symbols[p] : '?';
-
-    BIO_write(b, &c, 1);
-    (void)BIO_flush(b);
-    return 1;
 }
