@@ -270,7 +270,11 @@ typedef enum OPTION_choice {
 } OPTION_CHOICE;
 
 const OPTIONS speed_options[] = {
-    {OPT_HELP_STR, 1, '-', "Usage: %s [options] [algorithm...]\n"},
+    {OPT_HELP_STR, 1, '-',
+     "Usage: %s [options] [algorithm...]\n"
+     "All +int options consider prefix '0' as base-8 input, "
+     "prefix '0x'/'0X' as base-16 input.\n"
+    },
 
     OPT_SECTION("General"),
     {"help", OPT_HELP, '-', "Display this summary"},
@@ -2447,7 +2451,7 @@ int speed_main(int argc, char **argv)
             break;
         case OPT_MULTI:
 #ifndef NO_FORK
-            multi = atoi(opt_arg());
+            multi = opt_int_arg();
             if ((size_t)multi >= SIZE_MAX / sizeof(int)) {
                 BIO_printf(bio_err, "%s: multi argument too large\n", prog);
                 return 0;
@@ -2456,7 +2460,7 @@ int speed_main(int argc, char **argv)
             break;
         case OPT_ASYNCJOBS:
 #ifndef OPENSSL_NO_ASYNC
-            async_jobs = atoi(opt_arg());
+            async_jobs = opt_int_arg();
             if (!ASYNC_is_capable()) {
                 BIO_printf(bio_err,
                            "%s: async_jobs specified but async not supported\n",
@@ -2504,10 +2508,10 @@ int speed_main(int argc, char **argv)
             seconds.sym = seconds.rsa = seconds.dsa = seconds.ecdsa
                         = seconds.ecdh = seconds.eddsa
                         = seconds.sm2 = seconds.ffdh = seconds.keygen
-                        = atoi(opt_arg());
+                        = opt_int_arg();
             break;
         case OPT_BYTES:
-            lengths_single = atoi(opt_arg());
+            lengths_single = opt_int_arg();
             lengths = &lengths_single;
             size_num = 1;
             break;
