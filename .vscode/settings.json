@@ -1,19 +1,6 @@
 {
     "files.associations": {
-        "http.h": "c",
-        "string.h": "c",
-        "sstream": "c",
-        "stdarg.h": "c",
-        "stat.h": "c",
-        "array": "c",
-        "hash_map": "c",
-        "deque": "c",
-        "list": "c",
-        "string": "c",
-        "vector": "c",
-        "iterator": "c",
-        "string_view": "c",
         "*.in": "c",
-        "chrono": "c"
+        "*.inc": "c"
     }
 }

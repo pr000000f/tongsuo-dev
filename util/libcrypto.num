@@ -5724,3 +5724,9 @@ ATTRIBUTES_SYNTAX_free                  ?	3_0_3	EXIST::FUNCTION:
 ATTRIBUTES_SYNTAX_new                   ?	3_0_3	EXIST::FUNCTION:
 ATTRIBUTES_SYNTAX_it                    ?	3_0_3	EXIST::FUNCTION:
 OSSL_STACK_OF_X509_free                 ?	3_1_0	EXIST::FUNCTION:
+BN_signed_bin2bn                        ?	3_1_0	EXIST::FUNCTION:
+BN_signed_bn2bin                        ?	3_1_0	EXIST::FUNCTION:
+BN_signed_lebin2bn                      ?	3_1_0	EXIST::FUNCTION:
+BN_signed_bn2lebin                      ?	3_1_0	EXIST::FUNCTION:
+BN_signed_native2bn                     ?	3_1_0	EXIST::FUNCTION:
+BN_signed_bn2native                     ?	3_1_0	EXIST::FUNCTION:
