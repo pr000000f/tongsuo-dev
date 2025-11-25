@@ -74,6 +74,8 @@ static void kdf_pvk_free(void *vctx)
 
 static void *kdf_pvk_dup(void *vctx)
 {
+    return NULL;
+    /*
     const KDF_PVK *src = (const KDF_PVK *)vctx;
     KDF_PVK *dest;
 
@@ -90,6 +92,7 @@ static void *kdf_pvk_dup(void *vctx)
  err:
     kdf_pvk_free(dest);
     return NULL;
+    */
 }
 
 static void kdf_pvk_reset(void *vctx)

@@ -32,6 +32,8 @@
 
 static EVP_PKEY *dsa_to_dh(EVP_PKEY *dh);
 
+static int verbose = 1;
+
 typedef enum OPTION_choice {
     OPT_COMMON,
     OPT_INFORM, OPT_OUTFORM, OPT_IN, OPT_OUT,

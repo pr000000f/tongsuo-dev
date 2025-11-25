@@ -181,6 +181,7 @@ int sm2_threshold_main(int argc, char **argv)
     unsigned char *msgbuf = NULL;
     OPTION_CHOICE o;
 
+    opt_set_unknown_name("cipher");
     prog = opt_init(argc, argv, sm2_threshold_options);
     while ((o = opt_next()) != OPT_EOF) {
         switch (o) {
