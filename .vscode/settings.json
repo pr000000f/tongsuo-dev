@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "*.in": "c"
+        "*.in": "c",
+        "x509.h": "c"
     }
 }
