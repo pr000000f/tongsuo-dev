@@ -13,6 +13,7 @@
         "vector": "c",
         "iterator": "c",
         "string_view": "c",
-        "*.in": "c"
+        "*.in": "c",
+        "chrono": "c"
     }
 }
