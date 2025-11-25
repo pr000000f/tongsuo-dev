@@ -74,6 +74,7 @@ int delecred_main(int argc, char **argv)
     unsigned char *dc_raw = NULL;
     unsigned long dc_raw_len = 0;
 
+    opt_set_unknown_name("cipher");
     prog = opt_init(argc, argv, delecred_options);
     while ((o = opt_next()) != OPT_EOF) {
         switch (o) {
