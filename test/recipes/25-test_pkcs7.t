@@ -40,4 +40,3 @@ ok(run(app(["openssl", "pkcs7", "-print_certs", "-quiet",
             "-out", $out])));
 is(cmp_text($out, srctop_file('test', 'recipes', '25-test_pkcs7_data', 'grfc.out')),
     0, 'Comparing output');
-    

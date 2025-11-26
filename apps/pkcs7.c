@@ -47,7 +47,7 @@ const OPTIONS pkcs7_options[] = {
     {"print_certs", OPT_PRINT_CERTS, '-',
      "Print_certs  print any certs or crl in the input"},
     {"quiet", OPT_QUIET, '-',
-    "When used with -print_certs, it produces a cleaner output"},
+     "When used with -print_certs, it produces a cleaner output"},
 
     OPT_PROV_OPTIONS,
     {NULL}
