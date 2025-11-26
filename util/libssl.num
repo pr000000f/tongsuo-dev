@@ -630,3 +630,6 @@ SSL_CTX_disable_force_ntls              630	3_0_3	EXIST::FUNCTION:NTLS
 SSL_enable_force_ntls                   631	3_0_3	EXIST::FUNCTION:NTLS
 SSL_disable_force_ntls                  632	3_0_3	EXIST::FUNCTION:NTLS
 SSL_client_hello_get_extension_order    ?	3_1_0	EXIST::FUNCTION:
+OSSL_QUIC_client_method                 ?	3_1_0	EXIST::FUNCTION:QUIC
+OSSL_QUIC_client_thread_method          ?	3_1_0	EXIST::FUNCTION:QUIC
+OSSL_QUIC_server_method                 ?	3_1_0	EXIST::FUNCTION:QUIC
