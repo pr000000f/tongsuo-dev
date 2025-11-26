@@ -435,7 +435,7 @@ static int convert_asn1_to_time_t(int idx)
 
     if (!TEST_time_t_eq(testdateutc, asn1_to_utc[idx].expected)) {
         TEST_info("asn1_string_to_time_t (%s) failed: expected %li, got %li\n",
-                asn1_to_utc[idx].input, asn1_to_utc[idx].expected, (signed long) testdateutc);
+                asn1_to_utc[idx].input, (long int) asn1_to_utc[idx].expected, (signed long) testdateutc);
         return 0;
     }
     return 1;
