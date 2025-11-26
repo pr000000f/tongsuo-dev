@@ -54,6 +54,10 @@ IF[{- !$disabled{'delegated-credential'} -}]
   SOURCE[../libssl]=ssl_dc.c
 ENDIF
 
+IF[{- !$disabled{quic} -}]
+  SOURCE[../libssl]=priority_queue.c
+ENDIF
+
 DEFINE[../libssl]=$AESDEF
 
 SOURCE[../providers/libcommon.a]=record/tls_pad.c
