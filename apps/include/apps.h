@@ -224,6 +224,8 @@ typedef struct ca_db_st {
 # endif
 } CA_DB;
 
+extern int do_updatedb(CA_DB *db, time_t *now);
+
 void app_bail_out(char *fmt, ...);
 void *app_malloc(size_t sz, const char *what);
 BIGNUM *load_serial(const char *serialfile, int create, ASN1_INTEGER **retai);
