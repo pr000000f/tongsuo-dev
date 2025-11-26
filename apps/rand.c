@@ -57,7 +57,9 @@ int rand_main(int argc, char **argv)
     char *outfile = NULL, *prog;
     OPTION_CHOICE o;
     unsigned char *ent_buf = NULL, *p;
-    int format = FORMAT_BINARY, i, num = -1, r, ret = 1, entropy = 0;
+    int format = FORMAT_BINARY, i, r, ret = 1, entropy = 0, buflen = 131072;
+    long num = -1;
+    uint8_t *buf = NULL;
     size_t ent_len = 0;
 
     prog = opt_init(argc, argv, rand_options);
@@ -106,7 +108,7 @@ int rand_main(int argc, char **argv)
     argc = opt_num_rest();
     argv = opt_rest();
     if (argc == 1) {
-        if (!opt_int(argv[0], &num) || num <= 0)
+        if (!opt_long(argv[0], &num) || num <= 0)
             goto opthelp;
     } else if (!opt_check_rest_arg(NULL)) {
         goto opthelp;
@@ -126,14 +128,12 @@ int rand_main(int argc, char **argv)
         out = BIO_push(b64, out);
     }
 
+    buf = app_malloc(buflen, "buffer for output file");
     while (num > 0) {
         /* When getting entropy from EGD, buf size must be less than 256 */
-        unsigned char buf[255];
-        int chunk;
+        long chunk;
 
-        chunk = num;
-        if (chunk > (int)sizeof(buf))
-            chunk = sizeof(buf);
+        chunk = (num > buflen) ? buflen : num;
 
         if (entropy) {
             ent_buf = TSAPI_GetEntropy(chunk, &ent_len);
@@ -177,6 +177,7 @@ int rand_main(int argc, char **argv)
  end:
     if (ret != 0)
         ERR_print_errors(bio_err);
+    OPENSSL_free(buf);
     release_engine(e);
     BIO_free_all(out);
     TSAPI_FreeEntropy(ent_buf, ent_len);
