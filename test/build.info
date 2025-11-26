@@ -1026,6 +1026,14 @@ ENDIF
   INCLUDE[ssl_ctx_test]=../include ../apps/include
   DEPEND[ssl_ctx_test]=../libcrypto ../libssl libtestutil.a
 
+  IF[{- !$disabled{'quic'} -}]
+    PROGRAMS{noinst}=quicapitest
+  ENDIF
+
+  SOURCE[quicapitest]=quicapitest.c helpers/ssltestlib.c
+  INCLUDE[quicapitest]=../include ../apps/include
+  DEPEND[quicapitest]=../libcrypto ../libssl libtestutil.a
+
 {-
    use File::Spec::Functions;
    use File::Basename;
