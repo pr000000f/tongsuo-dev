@@ -284,7 +284,7 @@ int PKCS7_verify(PKCS7 *p7, STACK_OF(X509) *certs, X509_STORE *store,
             /* Check for revocation status here */
         }
 
-    f ((p7bio = PKCS7_dataInit(p7, indata)) == NULL)
+    if ((p7bio = PKCS7_dataInit(p7, indata)) == NULL)
         goto err;
 
     if (flags & PKCS7_TEXT) {
