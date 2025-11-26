@@ -1053,3 +1053,13 @@ ML_DSA_65		1282
 delegated_name_constraints		1298
 associated_information		1319
 id_ct_ASPA		1320
+id_mod_cmp2000_02		1321
+id_mod_cmp2021_88		1322
+id_mod_cmp2021_02		1323
+id_it_rootCaCert		1324
+id_it_certProfile		1325
+id_it_crlStatusList		1326
+id_it_crls		1327
+id_regCtrl_altCertTemplate		1328
+id_regCtrl_algId		1329
+id_regCtrl_rsaKeyLen		1330

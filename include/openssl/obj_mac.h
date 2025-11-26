@@ -1389,6 +1389,18 @@
 #define NID_id_mod_cmp2000              284
 #define OBJ_id_mod_cmp2000              OBJ_id_pkix_mod,16L
 
+#define SN_id_mod_cmp2000_02            "id-mod-cmp2000-02"
+#define NID_id_mod_cmp2000_02           1321
+#define OBJ_id_mod_cmp2000_02           OBJ_id_pkix_mod,50L
+
+#define SN_id_mod_cmp2021_88            "id-mod-cmp2021-88"
+#define NID_id_mod_cmp2021_88           1322
+#define OBJ_id_mod_cmp2021_88           OBJ_id_pkix_mod,99L
+
+#define SN_id_mod_cmp2021_02            "id-mod-cmp2021-02"
+#define NID_id_mod_cmp2021_02           1323
+#define OBJ_id_mod_cmp2021_02           OBJ_id_pkix_mod,100L
+
 #define SN_info_access          "authorityInfoAccess"
 #define LN_info_access          "Authority Information Access"
 #define NID_info_access         177
@@ -1669,6 +1681,22 @@
 #define NID_id_it_certReqTemplate               1225
 #define OBJ_id_it_certReqTemplate               OBJ_id_it,19L
 
+#define SN_id_it_rootCaCert             "id-it-rootCaCert"
+#define NID_id_it_rootCaCert            1324
+#define OBJ_id_it_rootCaCert            OBJ_id_it,20L
+
+#define SN_id_it_certProfile            "id-it-certProfile"
+#define NID_id_it_certProfile           1325
+#define OBJ_id_it_certProfile           OBJ_id_it,21L
+
+#define SN_id_it_crlStatusList          "id-it-crlStatusList"
+#define NID_id_it_crlStatusList         1326
+#define OBJ_id_it_crlStatusList         OBJ_id_it,22L
+
+#define SN_id_it_crls           "id-it-crls"
+#define NID_id_it_crls          1327
+#define OBJ_id_it_crls          OBJ_id_it,23L
+
 #define SN_id_regCtrl           "id-regCtrl"
 #define NID_id_regCtrl          313
 #define OBJ_id_regCtrl          OBJ_id_pkip,1L
@@ -1700,6 +1728,18 @@
 #define SN_id_regCtrl_protocolEncrKey           "id-regCtrl-protocolEncrKey"
 #define NID_id_regCtrl_protocolEncrKey          320
 #define OBJ_id_regCtrl_protocolEncrKey          OBJ_id_regCtrl,6L
+
+#define SN_id_regCtrl_altCertTemplate           "id-regCtrl-altCertTemplate"
+#define NID_id_regCtrl_altCertTemplate          1328
+#define OBJ_id_regCtrl_altCertTemplate          OBJ_id_regCtrl,7L
+
+#define SN_id_regCtrl_algId             "id-regCtrl-algId"
+#define NID_id_regCtrl_algId            1329
+#define OBJ_id_regCtrl_algId            OBJ_id_regCtrl,11L
+
+#define SN_id_regCtrl_rsaKeyLen         "id-regCtrl-rsaKeyLen"
+#define NID_id_regCtrl_rsaKeyLen                1330
+#define OBJ_id_regCtrl_rsaKeyLen                OBJ_id_regCtrl,12L
 
 #define SN_id_regInfo_utf8Pairs         "id-regInfo-utf8Pairs"
 #define NID_id_regInfo_utf8Pairs                321
