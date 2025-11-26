@@ -37,5 +37,7 @@ typedef struct async_fibre_st {
 #  undef async_fibre_init_dispatcher
 # endif
 # define async_fibre_init_dispatcher(f)
+# define async_local_init()                     1
+# define async_local_deinit()
 
 #endif
