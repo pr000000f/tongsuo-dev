@@ -34,7 +34,7 @@ my @conf_files = map { basename($_, ".in") } @conf_srcs;
 
 # We hard-code the number of tests to double-check that the globbing above
 # finds all files as expected.
-plan tests => 33;
+plan tests => 34;
 
 # Some test results depend on the configuration of enabled protocols. We only
 # verify generated sources in the default configuration.
@@ -52,6 +52,7 @@ if (!$no_tls && $no_tls_below1_3 && disabled("ec") && disabled("dh")) {
 }
 my $no_pre_tls1_3 = alldisabled(@all_pre_tls1_3);
 my $no_dtls = alldisabled(available_protocols("dtls"));
+my $no_quic = disabled("quic");
 my $no_npn = disabled("nextprotoneg");
 my $no_ct = disabled("ct");
 my $no_ec = disabled("ec");
@@ -117,6 +118,7 @@ my %skip = (
   "29-dtls-sctp-label-bug.cnf" => disabled("sctp") || disabled("sock"),
   "30-tls13-sm.cnf" => disabled("sm2") || disabled("sm3") || disabled("sm4")
                         || disabled("tls1_3") || !$no_fips,
+  "31-quic.cnf" => $no_quic || $no_ec,
   "32-pqc-groups.cnf" => disabled("tls1_3") || disabled("sm2") || disabled("ec") || disabled("kyber")
                         || disabled("sm2dh-mlkem768-hybrid") || !$no_fips,
   "38-delegated-credential.cnf" => disabled("delegated-credential"),

@@ -372,6 +372,7 @@ const char *ssl_session_id_name(ssl_session_id_t server)
 static const test_enum ssl_test_methods[] = {
     {"TLS", SSL_TEST_METHOD_TLS},
     {"DTLS", SSL_TEST_METHOD_DTLS},
+    {"QUIC", SSL_TEST_METHOD_QUIC},
 #ifndef OPENSSL_NO_NTLS
     {"NTLS", SSL_TEST_METHOD_NTLS},
 #endif
