@@ -722,6 +722,7 @@ typedef enum OPTION_choice {
     OPT_CERT_COMP,
 #endif
     OPT_HTTP_SERVER_BINMODE, OPT_NOCANAMES, OPT_IGNORE_UNEXPECTED_EOF, OPT_KTLS,
+    OPT_TFO,
     OPT_R_ENUM,
     OPT_S_ENUM,
     OPT_V_ENUM,
@@ -752,6 +753,9 @@ const OPTIONS s_server_options[] = {
 #endif
     {"4", OPT_4, '-', "Use IPv4 only"},
     {"6", OPT_6, '-', "Use IPv6 only"},
+#if defined(TCP_FASTOPEN) && !defined(OPENSSL_NO_TFO)
+    {"tfo", OPT_TFO, '-', "Listen for TCP Fast Open connections"},
+#endif
 
     OPT_SECTION("Identity"),
     {"context", OPT_CONTEXT, 's', "Set session ID context"},
@@ -1145,6 +1149,8 @@ int s_server_main(int argc, char *argv[])
 #ifndef OPENSSL_NO_KTLS
     int enable_ktls = 0;
 #endif
+    int tfo = 0;
+
     /* Init of few remaining global variables */
     local_argc = argc;
     local_argv = argv;
@@ -1834,6 +1840,9 @@ int s_server_main(int argc, char *argv[])
         case OPT_IGNORE_UNEXPECTED_EOF:
             ignore_unexpected_eof = 1;
             break;
+        case OPT_TFO:
+            tfo = 1;
+            break;
         }
     }
 
@@ -1861,6 +1870,11 @@ int s_server_main(int argc, char *argv[])
         goto end;
     }
 #endif
+
+    if (tfo && socket_type != SOCK_STREAM) {
+        BIO_printf(bio_err, "Can only use -tfo with TLS\n");
+        goto end;
+    }
 
     if (stateless && socket_type != SOCK_STREAM) {
         BIO_printf(bio_err, "Can only use --stateless with TLS\n");
@@ -2617,8 +2631,10 @@ skip:
         && unlink_unix_path)
         unlink(host);
 #endif
+    if (tfo)
+        BIO_printf(bio_s_out, "Listening for TFO\n");
     do_server(&accept_socket, host, port, socket_family, socket_type, protocol,
-              server_cb, context, naccept, bio_s_out);
+              server_cb, context, naccept, bio_s_out, tfo);
     print_stats(bio_s_out, ctx);
     ret = 0;
  end:
