@@ -86,6 +86,8 @@ EOF
 # zlib-dynamic  Like "zlib", but the zlib library is expected to be a shared
 #               library and will be loaded in run-time by the OpenSSL library.
 # sctp          include SCTP support
+# enable-quic   include QUIC support (currently just for developers as the
+#               implementation is by no means complete and usable)
 # no-uplink     Don't build support for UPLINK interface.
 # enable-weak-ssl-ciphers
 #               Enable weak ciphers that are disabled by default.
@@ -474,6 +476,7 @@ my @disablables = (
     "posix-io",
     "psk",
     "quic",
+    "quic",
     "rc4",
     "rc5",
     "rdrand",
@@ -581,6 +584,7 @@ our %disabled = ( # "what"         => "comment"
                   "ktls"                => "default",
                   "ml_dsa"              => "default",
                   "msan"                => "default",
+                  "quic"                => "default",
                   "ntls"                => "default",
                   "rc5"                 => "default",
                   "sctp"                => "default",
@@ -661,7 +665,7 @@ my @disable_cascades = (
     "ec"                => [ "ec2m", "ecdsa", "ecdh", "sm2", "sm2dh-mlkem768-hybrid"],
     "sm2"               => [ "sm2_threshold", "sm2dh-mlkem768-hybrid"],
     "ec_elgamal"        => [ "twisted_ec_elgamal" ],
-    "dgram"             => [ "dtls", "sctp" ],
+    "dgram"             => [ "dtls", "quic", "sctp" ],
     "sock"              => [ "dgram", "tfo" ],
     "dtls"              => [ @dtls ],
     sub { 0 == scalar grep { !$disabled{$_} } @dtls }
