@@ -37,6 +37,7 @@ my %ignore_symbols = (
     "gethostbyname" => 1,
     "gethostbyaddr" => 1,
     "getservbyname" => 1,
+    "OSSL_SAFE_MATH_UNSIGNED" => 1,
 );
 
 foreach my $f (catfile($config{sourcedir}, "util/engines.num"),
