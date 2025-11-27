@@ -5739,3 +5739,4 @@ CMS_EnvelopedData_decrypt               ?	3_1_0	EXIST::FUNCTION:CMS
 CMS_SignedData_free                     ?	3_1_0	EXIST::FUNCTION:CMS
 CMS_SignedData_new                      ?	3_1_0	EXIST::FUNCTION:CMS
 CMS_SignedData_verify                   ?	3_1_0	EXIST::FUNCTION:CMS
+X509_PUBKEY_set0_public_key             ?	3_1_0	EXIST::FUNCTION:
