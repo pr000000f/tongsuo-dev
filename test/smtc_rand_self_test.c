@@ -11,11 +11,13 @@
  * Tests for the gm rand self test
  */
 
+#include <math.h>
 #include <string.h>
 #include "testutil.h"
 #include "providers/smtc/self_test_rand.h"
 #include "smtc_rand_self_test.h"
 
+#define ROUND_TO_6_DIGIT(a) (round(a * 1000000.0) / 1000000.0)
 
 static unsigned char *bits2buf(const char *bits)
 {
@@ -51,49 +53,49 @@ static int test_smtc_rand_self_test(void)
 
     TEST_true(sizeof(million_bits_of_e) == 1000000 / 8);
     if (!TEST_true(rand_self_test_frequency(bits128, 128, &actual_P))
-        || !TEST_double_eq(0.215925, actual_P)
+        || !TEST_double_eq(0.215925, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(rand_self_test_block_frequency(bits100, 100, 10, &actual_P))
-        || !TEST_double_eq(0.706438, actual_P)
+        || !TEST_double_eq(0.706438, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(rand_self_test_poker(bits128, 128, 4, &actual_P))
-        || !TEST_double_eq(0.213734, actual_P)
+        || !TEST_double_eq(0.213734, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(
             rand_self_test_serial(bits128, 128, 2, &actual_P1, &actual_P2))
-        || !TEST_double_eq(0.436868, actual_P1)
-        || !TEST_double_eq(0.723674, actual_P2)
+        || !TEST_double_eq(0.436868, ROUND_TO_6_DIGIT(actual_P1))
+        || !TEST_double_eq(0.723674, ROUND_TO_6_DIGIT(actual_P2))
         || !TEST_true(rand_self_test_runs(bits128, 128, &actual_P))
-        || !TEST_double_eq(0.620729, actual_P)
+        || !TEST_double_eq(0.620729, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(
             rand_self_test_runs_distribution(bits128, 128, &actual_P))
-        || !TEST_double_eq(0.970152, actual_P)
+        || !TEST_double_eq(0.970152, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(
             rand_self_test_longest_run_of_ones(bits128, 128, &actual_P))
-        || !TEST_double_eq(0.180598, actual_P)
+        || !TEST_double_eq(0.180598, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(
             rand_self_test_binary_derivation(bits128, 128, 3, &actual_P))
-        || !TEST_double_eq(0.039669, actual_P)
+        || !TEST_double_eq(0.039669, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(
             rand_self_test_self_correlation(bits128, 128, 1, &actual_P))
-        || !TEST_double_eq(0.790080, actual_P)
+        || !TEST_double_eq(0.790080, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(rand_self_test_binary_matrix_rank(million_bits_of_e,
                                                         1000000,
                                                         &actual_P))
-        || !TEST_double_eq(0.307543, actual_P)
+        || !TEST_double_eq(0.307543, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(rand_self_test_cumulative_sums(bits100, 100, &actual_P1,
                                                      &actual_P2))
-        || !TEST_double_eq(0.219194, actual_P1)
-        || !TEST_double_eq(0.114866, actual_P2)
+        || !TEST_double_eq(0.219194, ROUND_TO_6_DIGIT(actual_P1))
+        || !TEST_double_eq(0.114866, ROUND_TO_6_DIGIT(actual_P2))
         || !TEST_true(rand_self_test_approximate_entropy(bits100, 100, 2,
                                                          &actual_P))
-        || !TEST_double_eq(0.235301, actual_P)
+        || !TEST_double_eq(0.235301, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(rand_self_test_linear_complexity(million_bits_of_e,
                                                        1000000, 1000,
                                                        &actual_P))
-        || !TEST_double_eq(0.844721, actual_P)
+        || !TEST_double_eq(0.844721, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(rand_self_test_maurer_universal_statistical(
                             million_bits_of_e, 1000000, &actual_P))
-        || !TEST_double_eq(0.282568, actual_P)
+        || !TEST_double_eq(0.282568, ROUND_TO_6_DIGIT(actual_P))
         || !TEST_true(rand_self_test_discrete_fourier_transform(bits100, 100, &actual_P))
-        || !TEST_double_eq(0.654721, actual_P))
+        || !TEST_double_eq(0.654721, ROUND_TO_6_DIGIT(actual_P)))
         goto end;
 
     ret = 1;
