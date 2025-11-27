@@ -476,7 +476,6 @@ my @disablables = (
     "posix-io",
     "psk",
     "quic",
-    "quic",
     "rc4",
     "rc5",
     "rdrand",
