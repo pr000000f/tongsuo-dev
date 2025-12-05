@@ -44,12 +44,22 @@ void SSL_CTX_disable_verify_peer_by_dc(SSL_CTX *ctx)
 
 void SSL_enable_verify_peer_by_dc(SSL *s)
 {
-    s->enable_verify_peer_by_dc = 1;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(s);
+
+    if (sc == NULL)
+        return;
+    
+    sc->enable_verify_peer_by_dc = 1;
 }
 
 void SSL_disable_verify_peer_by_dc(SSL *s)
 {
-    s->enable_verify_peer_by_dc = 0;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(s);
+
+    if (sc == NULL)
+        return;
+
+    sc->enable_verify_peer_by_dc = 0;
 }
 
 void SSL_CTX_enable_sign_by_dc(SSL_CTX *ctx)
@@ -64,17 +74,32 @@ void SSL_CTX_disable_sign_by_dc(SSL_CTX *ctx)
 
 void SSL_enable_sign_by_dc(SSL *s)
 {
-    s->enable_sign_by_dc = 1;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(s);
+
+    if (sc == NULL)
+        return;
+
+    sc->enable_sign_by_dc = 1;
 }
 
 void SSL_disable_sign_by_dc(SSL *s)
 {
-    s->enable_sign_by_dc = 0;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(s);
+
+    if (sc == NULL)
+        return;
+
+    sc->enable_sign_by_dc = 0;
 }
 
 int SSL_get_delegated_credential_tag(SSL *s)
 {
-    return s->delegated_credential_tag;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(s);
+
+    if (sc == NULL)
+        return 0;
+
+    return sc->delegated_credential_tag;
 }
 
 static int ssl_dc_tbs_data(unsigned char *parent_cert_raw,

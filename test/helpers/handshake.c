@@ -981,9 +981,15 @@ static void do_reneg_setup_step(const SSL_TEST_CTX *test_ctx, PEER *peer)
         return;
     } else if (test_ctx->handshake_mode == SSL_TEST_HANDSHAKE_POST_HANDSHAKE_AUTH) {
         if (SSL_is_server(peer->ssl)) {
+            SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL_ONLY(peer->ssl);
+
+            if (sc == NULL) {
+                peer->status = PEER_ERROR;
+                return;
+            }
             /* Make the server believe it's received the extension */
             if (test_ctx->extra.server.force_pha)
-                peer->ssl->post_handshake_auth = SSL_PHA_EXT_RECEIVED;
+                sc->post_handshake_auth = SSL_PHA_EXT_RECEIVED;
             ret = SSL_verify_client_post_handshake(peer->ssl);
             if (!ret) {
                 peer->status = PEER_ERROR;
@@ -1445,6 +1451,7 @@ static HANDSHAKE_RESULT *do_handshake_internal(
     const STACK_OF(X509_NAME) *names;
     time_t start;
     const char* cipher;
+    SSL_CONNECTION *client_sc, *server_sc;
 
     if (ret == NULL)
         return NULL;
@@ -1722,7 +1729,8 @@ static HANDSHAKE_RESULT *do_handshake_internal(
     SSL_get_peer_signature_type_nid(client.ssl, &ret->server_sign_type);
     SSL_get_peer_signature_type_nid(server.ssl, &ret->client_sign_type);
 
-    if (SSL_IS_TLS13(client.ssl) && client.ssl->s3.did_kex)
+    client_sc = SSL_CONNECTION_FROM_SSL_ONLY(client.ssl);
+    if (SSL_CONNECTION_IS_TLS13(client_sc) && client_sc->s3.did_kex)
         ret->client_key_share = SSL_get_negotiated_group(client.ssl);
 
     names = SSL_get0_peer_CA_list(client.ssl);
@@ -1740,12 +1748,13 @@ static HANDSHAKE_RESULT *do_handshake_internal(
     ret->server_cert_type = peer_pkey_type(client.ssl);
     ret->client_cert_type = peer_pkey_type(server.ssl);
 
-    if (client.ssl->hello_retry_request != SSL_HRR_NONE)
+    if (client_sc->hello_retry_request != SSL_HRR_NONE)
         ret->client_hrr = SSL_TEST_HRR_YES;
     else
         ret->client_hrr = SSL_TEST_HRR_NO;
 
-    if (server.ssl->hello_retry_request != SSL_HRR_NONE)
+    server_sc = SSL_CONNECTION_FROM_SSL_ONLY(server.ssl);
+    if (server_sc->hello_retry_request != SSL_HRR_NONE)
         ret->server_hrr = SSL_TEST_HRR_YES;
     else
         ret->server_hrr = SSL_TEST_HRR_NO;

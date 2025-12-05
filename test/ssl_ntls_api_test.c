@@ -216,6 +216,7 @@ static int test_ntls_ssl_set_cert_pkey_file_api(int i)
     const char   *enc_key_file = NULL;
     SSL_CTX      *ctx = NULL;
     SSL          *ssl = NULL;
+    SSL_CONNECTION  *sc = NULL;
 
     if (i == 0) {
 # ifndef OPENSSL_NO_SM2
@@ -244,21 +245,25 @@ static int test_ntls_ssl_set_cert_pkey_file_api(int i)
     if (!TEST_true(ssl != NULL))
         goto err;
 
+    sc = SSL_CONNECTION_FROM_SSL_ONLY(ssl);
+    if (!TEST_true(sc != NULL))
+        goto err;
+
     if (!TEST_true(SSL_is_ntls(ssl) == 1))
         goto err;
 
     SSL_enable_ntls(ssl);
-    if (!TEST_true(ssl->enable_ntls == 1))
+    if (!TEST_true(sc->enable_ntls == 1))
         goto err;
     SSL_disable_ntls(ssl);
-    if (!TEST_true(ssl->enable_ntls == 0))
+    if (!TEST_true(sc->enable_ntls == 0))
         goto err;
 
     SSL_enable_force_ntls(ssl);
-    if (!TEST_true(ssl->enable_force_ntls == 1))
+    if (!TEST_true(sc->enable_force_ntls == 1))
         goto err;
     SSL_disable_force_ntls(ssl);
-    if (!TEST_true(ssl->enable_force_ntls == 0))
+    if (!TEST_true(sc->enable_force_ntls == 0))
         goto err;
 
     if (!TEST_int_eq(SSL_use_sign_certificate_file(ssl,
@@ -267,10 +272,10 @@ static int test_ntls_ssl_set_cert_pkey_file_api(int i)
         goto err;
 
     if (i == 0) {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_SM2_SIGN].x509 != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_SM2_SIGN].x509 != NULL))
             goto err;
     } else {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_RSA_SIGN].x509 != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_RSA_SIGN].x509 != NULL))
             goto err;
     }
 
@@ -280,10 +285,10 @@ static int test_ntls_ssl_set_cert_pkey_file_api(int i)
         goto err;
 
     if (i == 0) {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_SM2_SIGN].privatekey != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_SM2_SIGN].privatekey != NULL))
             goto err;
     } else {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_RSA_SIGN].privatekey != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_RSA_SIGN].privatekey != NULL))
             goto err;
     }
 
@@ -293,10 +298,10 @@ static int test_ntls_ssl_set_cert_pkey_file_api(int i)
         goto err;
 
     if (i == 0) {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_SM2_ENC].x509 != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_SM2_ENC].x509 != NULL))
             goto err;
     } else {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_RSA_ENC].x509 != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_RSA_ENC].x509 != NULL))
             goto err;
     }
 
@@ -306,10 +311,10 @@ static int test_ntls_ssl_set_cert_pkey_file_api(int i)
         goto err;
 
     if (i == 0) {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_SM2_ENC].privatekey != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_SM2_ENC].privatekey != NULL))
             goto err;
     } else {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_RSA_ENC].privatekey != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_RSA_ENC].privatekey != NULL))
             goto err;
     }
 
@@ -465,6 +470,7 @@ static int test_ntls_ssl_set_cert_pkey_api(int i)
     BIO          *sign_pkey_bio = NULL;
     BIO          *enc_cert_bio = NULL;
     BIO          *enc_pkey_bio = NULL;
+    SSL_CONNECTION  *sc = NULL;
 
     if (i == 0) {
 # ifndef OPENSSL_NO_SM2
@@ -512,18 +518,23 @@ static int test_ntls_ssl_set_cert_pkey_api(int i)
     ctx = SSL_CTX_new(NTLS_method());
     if (!TEST_true(ctx != NULL))
         goto err;
+
     ssl = SSL_new(ctx);
     if (!TEST_true(ssl != NULL))
+        goto err;
+
+    sc = SSL_CONNECTION_FROM_SSL_ONLY(ssl);
+    if (!TEST_true(sc != NULL))
         goto err;
 
     if (!TEST_int_eq(SSL_use_sign_certificate(ssl, sign_cert), 1))
         goto err;
 
     if (i == 0) {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_SM2_SIGN].x509 != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_SM2_SIGN].x509 != NULL))
             goto err;
     } else {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_RSA_SIGN].x509 != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_RSA_SIGN].x509 != NULL))
             goto err;
     }
 
@@ -531,10 +542,10 @@ static int test_ntls_ssl_set_cert_pkey_api(int i)
         goto err;
 
     if (i == 0) {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_SM2_SIGN].privatekey != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_SM2_SIGN].privatekey != NULL))
             goto err;
     } else {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_RSA_SIGN].privatekey != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_RSA_SIGN].privatekey != NULL))
             goto err;
     }
 
@@ -542,10 +553,10 @@ static int test_ntls_ssl_set_cert_pkey_api(int i)
         goto err;
 
     if (i == 0) {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_SM2_ENC].x509 != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_SM2_ENC].x509 != NULL))
             goto err;
     } else {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_RSA_ENC].x509 != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_RSA_ENC].x509 != NULL))
             goto err;
     }
 
@@ -553,10 +564,10 @@ static int test_ntls_ssl_set_cert_pkey_api(int i)
         goto err;
 
     if (i == 0) {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_SM2_ENC].privatekey != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_SM2_ENC].privatekey != NULL))
             goto err;
     } else {
-        if (!TEST_true(ssl->cert->pkeys[SSL_PKEY_RSA_ENC].privatekey != NULL))
+        if (!TEST_true(sc->cert->pkeys[SSL_PKEY_RSA_ENC].privatekey != NULL))
             goto err;
     }
 

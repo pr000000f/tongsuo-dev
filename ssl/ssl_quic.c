@@ -19,6 +19,10 @@ int SSL_set_quic_transport_params(SSL *ssl, const uint8_t *params,
                                   size_t params_len)
 {
     uint8_t *tmp;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return 0;
 
     if (params == NULL || params_len == 0) {
         tmp = NULL;
@@ -29,9 +33,9 @@ int SSL_set_quic_transport_params(SSL *ssl, const uint8_t *params,
             return 0;
     }
 
-    OPENSSL_free(ssl->ext.quic_transport_params);
-    ssl->ext.quic_transport_params = tmp;
-    ssl->ext.quic_transport_params_len = params_len;
+    OPENSSL_free(sc->ext.quic_transport_params);
+    sc->ext.quic_transport_params = tmp;
+    sc->ext.quic_transport_params_len = params_len;
     return 1;
 }
 
@@ -39,24 +43,34 @@ void SSL_get_peer_quic_transport_params(const SSL *ssl,
                                         const uint8_t **out_params,
                                         size_t *out_params_len)
 {
-    if (ssl->ext.peer_quic_transport_params_len) {
-        *out_params = ssl->ext.peer_quic_transport_params;
-        *out_params_len = ssl->ext.peer_quic_transport_params_len;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return;
+
+    if (sc->ext.peer_quic_transport_params_len) {
+        *out_params = sc->ext.peer_quic_transport_params;
+        *out_params_len = sc->ext.peer_quic_transport_params_len;
     } else {
-        *out_params = ssl->ext.peer_quic_transport_params_draft;
-        *out_params_len = ssl->ext.peer_quic_transport_params_draft_len;
+        *out_params = sc->ext.peer_quic_transport_params_draft;
+        *out_params_len = sc->ext.peer_quic_transport_params_draft_len;
     }
 }
 
 /* Returns the negotiated version, or -1 on error */
 int SSL_get_peer_quic_transport_version(const SSL *ssl)
 {
-    if (ssl->ext.peer_quic_transport_params_len != 0
-            && ssl->ext.peer_quic_transport_params_draft_len != 0)
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return 0;
+
+    if (sc->ext.peer_quic_transport_params_len != 0
+            && sc->ext.peer_quic_transport_params_draft_len != 0)
         return -1;
-    if (ssl->ext.peer_quic_transport_params_len != 0)
+    if (sc->ext.peer_quic_transport_params_len != 0)
         return TLSEXT_TYPE_quic_transport_parameters;
-    if (ssl->ext.peer_quic_transport_params_draft_len != 0)
+    if (sc->ext.peer_quic_transport_params_draft_len != 0)
         return TLSEXT_TYPE_quic_transport_parameters_draft;
 
     return -1;
@@ -64,24 +78,43 @@ int SSL_get_peer_quic_transport_version(const SSL *ssl)
 
 void SSL_set_quic_use_legacy_codepoint(SSL *ssl, int use_legacy)
 {
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return;
+
     if (use_legacy)
-        ssl->quic_transport_version = TLSEXT_TYPE_quic_transport_parameters_draft;
+        sc->quic_transport_version = TLSEXT_TYPE_quic_transport_parameters_draft;
     else
-        ssl->quic_transport_version = TLSEXT_TYPE_quic_transport_parameters;
+        sc->quic_transport_version = TLSEXT_TYPE_quic_transport_parameters;
 }
 
 void SSL_set_quic_transport_version(SSL *ssl, int version)
 {
-    ssl->quic_transport_version = version;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return;
+
+    sc->quic_transport_version = version;
 }
 
 int SSL_get_quic_transport_version(const SSL *ssl)
 {
-    return ssl->quic_transport_version;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return 0;
+
+    return sc->quic_transport_version;
 }
 
 size_t SSL_quic_max_handshake_flight_len(const SSL *ssl, OSSL_ENCRYPTION_LEVEL level)
 {
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return 0;
     /*
      * Limits flights to 16K by default when there are no large
      * (certificate-carrying) messages.
@@ -95,21 +128,21 @@ size_t SSL_quic_max_handshake_flight_len(const SSL *ssl, OSSL_ENCRYPTION_LEVEL l
         /* QUIC does not send EndOfEarlyData. */
         return 0;
     case ssl_encryption_handshake:
-        if (ssl->server) {
+        if (sc->server) {
             /*
              * Servers may receive Certificate message if configured to request
              * client certificates.
              */
-            if ((ssl->verify_mode & SSL_VERIFY_PEER)
-                    && ssl->max_cert_list > DEFAULT_FLIGHT_LIMIT)
-                return ssl->max_cert_list;
+            if ((sc->verify_mode & SSL_VERIFY_PEER)
+                    && sc->max_cert_list > DEFAULT_FLIGHT_LIMIT)
+                return sc->max_cert_list;
         } else {
             /*
              * Clients may receive both Certificate message and a CertificateRequest
              * message.
              */
-            if (2*ssl->max_cert_list > DEFAULT_FLIGHT_LIMIT)
-                return 2 * ssl->max_cert_list;
+            if (2 * sc->max_cert_list > DEFAULT_FLIGHT_LIMIT)
+                return 2 * sc->max_cert_list;
         }
         return DEFAULT_FLIGHT_LIMIT;
     case ssl_encryption_application:
@@ -121,28 +154,42 @@ size_t SSL_quic_max_handshake_flight_len(const SSL *ssl, OSSL_ENCRYPTION_LEVEL l
 
 OSSL_ENCRYPTION_LEVEL SSL_quic_read_level(const SSL *ssl)
 {
-    return ssl->quic_read_level;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return 0;
+    
+    return sc->quic_read_level;
 }
 
 OSSL_ENCRYPTION_LEVEL SSL_quic_write_level(const SSL *ssl)
 {
-    return ssl->quic_write_level;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return 0;
+
+    return sc->quic_write_level;
 }
 
 int SSL_provide_quic_data(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
                           const uint8_t *data, size_t len)
 {
     size_t l, offset;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
 
-    if (!SSL_IS_QUIC(ssl)) {
+    if (sc == NULL)
+        return 0;
+
+    if (!SSL_CONNECTION_IS_QUIC(sc)) {
         ERR_raise(ERR_LIB_SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
 
     /* Level can be different than the current read, but not less */
-    if (level < ssl->quic_read_level
-            || (ssl->quic_input_data_tail != NULL && level < ssl->quic_input_data_tail->level)
-            || level < ssl->quic_latest_level_received) {
+    if (level < sc->quic_read_level
+            || (sc->quic_input_data_tail != NULL && level < sc->quic_input_data_tail->level)
+            || level < sc->quic_latest_level_received) {
         ERR_raise(ERR_LIB_SSL, SSL_R_WRONG_ENCRYPTION_LEVEL_RECEIVED);
         return 0;
     }
@@ -150,7 +197,7 @@ int SSL_provide_quic_data(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
     if (len == 0)
         return 1;
 
-    if (ssl->quic_buf == NULL) {
+    if (sc->quic_buf == NULL) {
         BUF_MEM *buf;
         if ((buf = BUF_MEM_new()) == NULL) {
             ERR_raise(ERR_LIB_SSL, ERR_R_INTERNAL_ERROR);
@@ -161,40 +208,40 @@ int SSL_provide_quic_data(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
             BUF_MEM_free(buf);
             return 0;
         }
-        ssl->quic_buf = buf;
+        sc->quic_buf = buf;
         /* We preallocated storage, but there's still no *data*. */
-        ssl->quic_buf->length = 0;
+        sc->quic_buf->length = 0;
         buf = NULL;
     }
 
     /* A TLS message must not cross an encryption level boundary */
-    if (ssl->quic_buf->length != ssl->quic_next_record_start
-            && level != ssl->quic_latest_level_received) {
+    if (sc->quic_buf->length != sc->quic_next_record_start
+            && level != sc->quic_latest_level_received) {
         ERR_raise(ERR_LIB_SSL, SSL_R_WRONG_ENCRYPTION_LEVEL_RECEIVED);
         return 0;
     }
-    ssl->quic_latest_level_received = level;
+    sc->quic_latest_level_received = level;
 
-    offset = ssl->quic_buf->length;
-    if (!BUF_MEM_grow(ssl->quic_buf, offset + len)) {
+    offset = sc->quic_buf->length;
+    if (!BUF_MEM_grow(sc->quic_buf, offset + len)) {
         ERR_raise(ERR_LIB_SSL, ERR_R_INTERNAL_ERROR);
         return 0;
     }
-    memcpy(ssl->quic_buf->data + offset, data, len);
+    memcpy(sc->quic_buf->data + offset, data, len);
 
     /* Split on handshake message boundaries */
-    while (ssl->quic_buf->length > ssl->quic_next_record_start
+    while (sc->quic_buf->length > sc->quic_next_record_start
                                    + SSL3_HM_HEADER_LENGTH) {
         QUIC_DATA *qd;
         const uint8_t *p;
 
         /* TLS Handshake message header has 1-byte type and 3-byte length */
-        p = (const uint8_t *)ssl->quic_buf->data
-            + ssl->quic_next_record_start + 1;
+        p = (const uint8_t *)sc->quic_buf->data
+            + sc->quic_next_record_start + 1;
         n2l3(p, l);
         l += SSL3_HM_HEADER_LENGTH;
         /* Don't allocate a QUIC_DATA if we don't have a full record */
-        if (l > ssl->quic_buf->length - ssl->quic_next_record_start)
+        if (l > sc->quic_buf->length - sc->quic_next_record_start)
             break;
 
         qd = OPENSSL_zalloc(sizeof(*qd));
@@ -205,15 +252,15 @@ int SSL_provide_quic_data(SSL *ssl, OSSL_ENCRYPTION_LEVEL level,
 
         qd->next = NULL;
         qd->length = l;
-        qd->start = ssl->quic_next_record_start;
+        qd->start = sc->quic_next_record_start;
         qd->level = level;
 
-        if (ssl->quic_input_data_tail != NULL)
-            ssl->quic_input_data_tail->next = qd;
+        if (sc->quic_input_data_tail != NULL)
+            sc->quic_input_data_tail->next = qd;
         else
-            ssl->quic_input_data_head = qd;
-        ssl->quic_input_data_tail = qd;
-        ssl->quic_next_record_start += l;
+            sc->quic_input_data_head = qd;
+        sc->quic_input_data_tail = qd;
+        sc->quic_next_record_start += l;
     }
 
     return 1;
@@ -230,14 +277,19 @@ int SSL_CTX_set_quic_method(SSL_CTX *ctx, const SSL_QUIC_METHOD *quic_method)
 
 int SSL_set_quic_method(SSL *ssl, const SSL_QUIC_METHOD *quic_method)
 {
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if(sc == NULL)
+        return 0;
+
     if (ssl->method->version != TLS_ANY_VERSION)
         return 0;
-    ssl->quic_method = quic_method;
-    ssl->options &= ~SSL_OP_ENABLE_MIDDLEBOX_COMPAT;
+    sc->quic_method = quic_method;
+    sc->options &= ~SSL_OP_ENABLE_MIDDLEBOX_COMPAT;
     return 1;
 }
 
-int quic_set_encryption_secrets(SSL *s, OSSL_ENCRYPTION_LEVEL level)
+int quic_set_encryption_secrets(SSL_CONNECTION *s, OSSL_ENCRYPTION_LEVEL level)
 {
     uint8_t *c2s_secret = NULL;
     uint8_t *s2c_secret = NULL;
@@ -246,8 +298,9 @@ int quic_set_encryption_secrets(SSL *s, OSSL_ENCRYPTION_LEVEL level)
     size_t len;
     const EVP_MD *md;
     const SSL_CIPHER *c = NULL;
+    SSL *ssl = SSL_CONNECTION_GET_SSL(s);
 
-    if (!SSL_IS_QUIC(s))
+    if (!SSL_CONNECTION_IS_QUIC(s))
         return 1;
 
     /* secrets from the POV of the client */
@@ -304,13 +357,13 @@ int quic_set_encryption_secrets(SSL *s, OSSL_ENCRYPTION_LEVEL level)
     write_secret = s->server ? s2c_secret : c2s_secret;
 
     if (read_secret &&
-        !s->quic_method->set_read_secret(s, level, c, read_secret, len)) {
+        !s->quic_method->set_read_secret(ssl, level, c, read_secret, len)) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
         return 0;
     }
 
     if (write_secret &&
-        !s->quic_method->set_write_secret(s, level, c, write_secret, len)) {
+        !s->quic_method->set_write_secret(ssl, level, c, write_secret, len)) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
         return 0;
     }
@@ -321,22 +374,26 @@ int quic_set_encryption_secrets(SSL *s, OSSL_ENCRYPTION_LEVEL level)
 int SSL_process_quic_post_handshake(SSL *ssl)
 {
     int ret;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
 
-    if (SSL_in_init(ssl) || !SSL_IS_QUIC(ssl)) {
+    if(sc == NULL)
+        return 0;
+
+    if (SSL_in_init(ssl) || !SSL_CONNECTION_IS_QUIC(sc)) {
         ERR_raise(ERR_LIB_SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
         return 0;
     }
 
     /* if there is no data, return success as BoringSSL */
-    while (ssl->quic_input_data_head != NULL) {
+    while (sc->quic_input_data_head != NULL) {
         /*
          * This is always safe (we are sure to be at a record boundary) because
          * SSL_read()/SSL_write() are never used for QUIC connections -- the
          * application data is handled at the QUIC layer instead.
          */
-        ossl_statem_set_in_init(ssl, 1);
-        ret = ssl->handshake_func(ssl);
-        ossl_statem_set_in_init(ssl, 0);
+        ossl_statem_set_in_init(sc, 1);
+        ret = sc->handshake_func(ssl);
+        ossl_statem_set_in_init(sc, 0);
 
         if (ret <= 0)
             return 0;
@@ -346,29 +403,39 @@ int SSL_process_quic_post_handshake(SSL *ssl)
 
 int SSL_is_quic(SSL *ssl)
 {
-    return SSL_IS_QUIC(ssl);
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if(sc == NULL)
+        return 0;
+
+    return SSL_CONNECTION_IS_QUIC(sc);
 }
 
 void SSL_set_quic_early_data_enabled(SSL *ssl, int enabled)
 {
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if(sc == NULL)
+        return;
+
     if (!SSL_is_quic(ssl) || !SSL_in_before(ssl))
         return;
 
     if (!enabled) {
-        ssl->early_data_state = SSL_EARLY_DATA_NONE;
+        sc->early_data_state = SSL_EARLY_DATA_NONE;
         return;
     }
 
-    if (ssl->server) {
-        ssl->early_data_state = SSL_EARLY_DATA_ACCEPTING;
+    if (sc->server) {
+        sc->early_data_state = SSL_EARLY_DATA_ACCEPTING;
         return;
     }
 
-    if ((ssl->session == NULL || ssl->session->ext.max_early_data == 0)
-            && ssl->psk_use_session_cb == NULL)
+    if ((sc->session == NULL || sc->session->ext.max_early_data == 0)
+            && sc->psk_use_session_cb == NULL)
         return;
 
-    ssl->early_data_state = SSL_EARLY_DATA_CONNECTING;
+    sc->early_data_state = SSL_EARLY_DATA_CONNECTING;
 }
 
 int SSL_set_quic_early_data_context(SSL *ssl, const uint8_t *context,
@@ -376,6 +443,10 @@ int SSL_set_quic_early_data_context(SSL *ssl, const uint8_t *context,
 
 {
     uint8_t *tmp;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if(sc == NULL)
+        return 0;
 
     if (context == NULL || context_len == 0) {
         tmp = NULL;
@@ -386,9 +457,9 @@ int SSL_set_quic_early_data_context(SSL *ssl, const uint8_t *context,
             return 0;
     }
 
-    OPENSSL_free(ssl->quic_early_data_context);
-    ssl->quic_early_data_context = tmp;
-    ssl->quic_early_data_context_len = context_len;
+    OPENSSL_free(sc->quic_early_data_context);
+    sc->quic_early_data_context = tmp;
+    sc->quic_early_data_context_len = context_len;
     return 1;
 }
 

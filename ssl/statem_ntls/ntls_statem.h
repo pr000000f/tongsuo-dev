@@ -131,10 +131,10 @@ typedef struct ossl_statem_st_ntls OSSL_STATEM_NTLS;
 
 __owur int ossl_statem_accept_ntls(SSL *s);
 __owur int ossl_statem_connect_ntls(SSL *s);
-void ossl_statem_clear_ntls(SSL *s);
-void ossl_statem_set_renegotiate_ntls(SSL *s);
-void ossl_statem_send_fatal_ntls(SSL *s, int al);
-void ossl_statem_fatal_ntls(SSL *s, int al, int reason, const char *fmt, ...);
+void ossl_statem_clear_ntls(SSL_CONNECTION *s);
+void ossl_statem_set_renegotiate_ntls(SSL_CONNECTION *s);
+void ossl_statem_send_fatal_ntls(SSL_CONNECTION *s, int al);
+void ossl_statem_fatal_ntls(SSL_CONNECTION *s, int al, int reason, const char *fmt, ...);
 # define SSL_AD_NO_ALERT    -1
 # define SSLfatal_alert_ntls(s, al) ossl_statem_send_fatal_ntls((s), (al))
 # define SSLfatal_ntls(s, al, r) SSLfatal_data_ntls((s), (al), (r), NULL)
@@ -143,18 +143,18 @@ void ossl_statem_fatal_ntls(SSL *s, int al, int reason, const char *fmt, ...);
      ERR_set_debug(OPENSSL_FILE, OPENSSL_LINE, OPENSSL_FUNC),   \
      ossl_statem_fatal_ntls)
 
-int ossl_statem_in_error_ntls(const SSL *s);
-void ossl_statem_set_in_init_ntls(SSL *s, int init);
-int ossl_statem_get_in_handshake_ntls(SSL *s);
-void ossl_statem_set_in_handshake_ntls(SSL *s, int inhand);
-__owur int ossl_statem_skip_early_data_ntls(SSL *s);
-void ossl_statem_check_finish_init_ntls(SSL *s, int send);
-void ossl_statem_set_hello_verify_done_ntls(SSL *s);
-__owur int ossl_statem_app_data_allowed_ntls(SSL *s);
-__owur int ossl_statem_export_allowed_ntls(SSL *s);
-__owur int ossl_statem_export_early_allowed_ntls(SSL *s);
+int ossl_statem_in_error_ntls(const SSL_CONNECTION *s);
+void ossl_statem_set_in_init_ntls(SSL_CONNECTION *s, int init);
+int ossl_statem_get_in_handshake_ntls(SSL_CONNECTION *s);
+void ossl_statem_set_in_handshake_ntls(SSL_CONNECTION *s, int inhand);
+__owur int ossl_statem_skip_early_data_ntls(SSL_CONNECTION *s);
+void ossl_statem_check_finish_init_ntls(SSL_CONNECTION *s, int send);
+void ossl_statem_set_hello_verify_done_ntls(SSL_CONNECTION *s);
+__owur int ossl_statem_app_data_allowed_ntls(SSL_CONNECTION *s);
+__owur int ossl_statem_export_allowed_ntls(SSL_CONNECTION *s);
+__owur int ossl_statem_export_early_allowed_ntls(SSL_CONNECTION *s);
 
 /* Flush the write BIO */
-int statem_flush_ntls(SSL *s);
-int state_machine_ntls(SSL *s, int server);
-int SSL_connection_is_ntls(SSL *s, int is_server);
+int statem_flush_ntls(SSL_CONNECTION *s);
+int state_machine_ntls(SSL_CONNECTION *s, int server);
+int SSL_connection_is_ntls(SSL_CONNECTION *s, int is_server);

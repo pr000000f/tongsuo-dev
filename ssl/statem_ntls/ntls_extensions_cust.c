@@ -110,7 +110,7 @@ void custom_ext_init_ntls(custom_ext_methods *exts)
 }
 
 /* Pass received custom extension data to the application for parsing. */
-int custom_ext_parse_ntls(SSL *s, unsigned int context, unsigned int ext_type,
+int custom_ext_parse_ntls(SSL_CONNECTION *s, unsigned int context, unsigned int ext_type,
                      const unsigned char *ext_data, size_t ext_size, X509 *x,
                      size_t chainidx)
 {
@@ -157,7 +157,7 @@ int custom_ext_parse_ntls(SSL *s, unsigned int context, unsigned int ext_type,
     if (!meth->parse_cb)
         return 1;
 
-    if (meth->parse_cb(s, ext_type, context, ext_data, ext_size, x, chainidx,
+    if (meth->parse_cb(SSL_CONNECTION_GET_SSL(s), ext_type, context, ext_data, ext_size, x, chainidx,
                        &al, meth->parse_arg) <= 0) {
         SSLfatal_ntls(s, al, SSL_R_BAD_EXTENSION);
         return 0;
@@ -170,7 +170,7 @@ int custom_ext_parse_ntls(SSL *s, unsigned int context, unsigned int ext_type,
  * Request custom extension data from the application and add to the return
  * buffer.
  */
-int custom_ext_add_ntls(SSL *s, int context, WPACKET *pkt, X509 *x, size_t chainidx,
+int custom_ext_add_ntls(SSL_CONNECTION *s, int context, WPACKET *pkt, X509 *x, size_t chainidx,
                    int maxversion)
 {
     custom_ext_methods *exts = &s->cert->custext;
@@ -204,7 +204,7 @@ int custom_ext_add_ntls(SSL *s, int context, WPACKET *pkt, X509 *x, size_t chain
             continue;
 
         if (meth->add_cb != NULL) {
-            int cb_retval = meth->add_cb(s, meth->ext_type, context, &out,
+            int cb_retval = meth->add_cb(SSL_CONNECTION_GET_SSL(s), meth->ext_type, context, &out,
                                          &outlen, x, chainidx, &al,
                                          meth->add_arg);
 
@@ -239,7 +239,7 @@ int custom_ext_add_ntls(SSL *s, int context, WPACKET *pkt, X509 *x, size_t chain
             meth->ext_flags |= SSL_EXT_FLAG_SENT;
         }
         if (meth->free_cb != NULL)
-            meth->free_cb(s, meth->ext_type, context, out, meth->add_arg);
+            meth->free_cb(SSL_CONNECTION_GET_SSL(s), meth->ext_type, context, out, meth->add_arg);
     }
     return 1;
 }

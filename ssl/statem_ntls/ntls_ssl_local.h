@@ -24,25 +24,25 @@
 # define SM2_DEFAULT_ID_LEN (sizeof(SM2_DEFAULT_ID) - 1)
 
 __owur int ssl_x509err2alert_ntls(int type);
-__owur int ssl3_do_write_ntls(SSL *s, int type);
-__owur unsigned long ssl3_output_cert_chain_ntls(SSL *s, WPACKET *pkt,
+__owur int ssl3_do_write_ntls(SSL_CONNECTION *s, int type);
+__owur unsigned long ssl3_output_cert_chain_ntls(SSL_CONNECTION *s, WPACKET *pkt,
                                                  CERT_PKEY *a_cpk,
                                                  CERT_PKEY *k_cpk);
-__owur int tls_close_construct_packet_ntls(SSL *s, WPACKET *pkt, int htype);
-__owur int tls_setup_handshake_ntls(SSL *s);
+__owur int tls_close_construct_packet_ntls(SSL_CONNECTION *s, WPACKET *pkt, int htype);
+__owur int tls_setup_handshake_ntls(SSL_CONNECTION *s);
 
-__owur int ssl_allow_compression_ntls(SSL *s);
+__owur int ssl_allow_compression_ntls(SSL_CONNECTION *s);
 
-__owur int ssl_version_supported_ntls(const SSL *s, int version,
+__owur int ssl_version_supported_ntls(const SSL_CONNECTION *s, int version,
                                  const SSL_METHOD **meth);
 
 __owur int ssl_set_version_bound_ntls(int method_version, int version, int *bound);
-__owur int ssl_choose_server_version_ntls(SSL *s, CLIENTHELLO_MSG *hello,
+__owur int ssl_choose_server_version_ntls(SSL_CONNECTION *s, CLIENTHELLO_MSG *hello,
                                      DOWNGRADE *dgrd);
-__owur int ssl_choose_client_version_ntls(SSL *s, int version,
+__owur int ssl_choose_client_version_ntls(SSL_CONNECTION *s, int version,
                                      RAW_EXTENSION *extensions);
 __owur int ntls_alert_code(int code);
-__owur int send_certificate_request_ntls(SSL *s);
+__owur int send_certificate_request_ntls(SSL_CONNECTION *s);
 
 /* statem/extensions_cust.c */
 
@@ -52,10 +52,10 @@ custom_ext_method *custom_ext_find_ntls(const custom_ext_methods *exts,
 
 void custom_ext_init_ntls(custom_ext_methods *meths);
 
-__owur int custom_ext_parse_ntls(SSL *s, unsigned int context, unsigned int ext_type,
+__owur int custom_ext_parse_ntls(SSL_CONNECTION *s, unsigned int context, unsigned int ext_type,
                             const unsigned char *ext_data, size_t ext_size,
                             X509 *x, size_t chainidx);
-__owur int custom_ext_add_ntls(SSL *s, int context, WPACKET *pkt, X509 *x,
+__owur int custom_ext_add_ntls(SSL_CONNECTION *s, int context, WPACKET *pkt, X509 *x,
                           size_t chainidx, int maxversion);
 
 __owur int custom_exts_copy_ntls(custom_ext_methods *dst,

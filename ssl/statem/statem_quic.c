@@ -15,7 +15,7 @@
 NON_EMPTY_TRANSLATION_UNIT
 #else
 
-int quic_get_message(SSL *s, int *mt, size_t *len)
+int quic_get_message(SSL_CONNECTION *s, int *mt, size_t *len)
 {
     size_t l;
     QUIC_DATA *qd = s->quic_input_data_head;
@@ -108,7 +108,7 @@ int quic_get_message(SSL *s, int *mt, size_t *len)
     }
     if (s->msg_callback)
         s->msg_callback(0, s->version, SSL3_RT_HANDSHAKE, s->init_buf->data,
-                        (size_t)s->init_num + SSL3_HM_HEADER_LENGTH, s,
+                        (size_t)s->init_num + SSL3_HM_HEADER_LENGTH, SSL_CONNECTION_GET_SSL(s),
                         s->msg_callback_arg);
 
     return 1;

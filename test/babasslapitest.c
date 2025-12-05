@@ -314,7 +314,7 @@ static int test_babassl_get0_wbio(void)
                                             SSL_ERROR_NONE)))
         goto end;
 
-    if (!TEST_ptr_eq(SSL_get0_wbio(serverssl), serverssl->wbio))
+    if (!TEST_ptr_eq(SSL_get0_wbio(serverssl), SSL_CONNECTION_FROM_SSL(serverssl)->wbio))
         goto end;
 
     testresult = 1;
@@ -380,9 +380,9 @@ static int test_babassl_set_session_ctx(void)
                                           &sctx2, &cctx2, cert, privkey))
         || !TEST_true(create_ssl_objects(sctx1, cctx1, &serverssl, &clientssl,
                                          NULL, NULL))
-        || !TEST_ptr_eq(serverssl->session_ctx, sctx1)
+        || !TEST_ptr_eq(SSL_CONNECTION_FROM_SSL(serverssl)->session_ctx, sctx1)
         || !TEST_ptr(SSL_set_SESSION_CTX(serverssl, sctx2))
-        || !TEST_ptr_eq(serverssl->session_ctx, sctx2))
+        || !TEST_ptr_eq(SSL_CONNECTION_FROM_SSL(serverssl)->session_ctx, sctx2))
         goto end;
 
     testresult = 1;
