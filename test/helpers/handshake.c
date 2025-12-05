@@ -1729,7 +1729,7 @@ static HANDSHAKE_RESULT *do_handshake_internal(
     SSL_get_peer_signature_type_nid(client.ssl, &ret->server_sign_type);
     SSL_get_peer_signature_type_nid(server.ssl, &ret->client_sign_type);
 
-    client_sc = SSL_CONNECTION_FROM_SSL_ONLY(client.ssl);
+    client_sc = SSL_CONNECTION_FROM_SSL(client.ssl);
     if (SSL_CONNECTION_IS_TLS13(client_sc) && client_sc->s3.did_kex)
         ret->client_key_share = SSL_get_negotiated_group(client.ssl);
 
@@ -1753,7 +1753,7 @@ static HANDSHAKE_RESULT *do_handshake_internal(
     else
         ret->client_hrr = SSL_TEST_HRR_NO;
 
-    server_sc = SSL_CONNECTION_FROM_SSL_ONLY(server.ssl);
+    server_sc = SSL_CONNECTION_FROM_SSL(server.ssl);
     if (server_sc->hello_retry_request != SSL_HRR_NONE)
         ret->server_hrr = SSL_TEST_HRR_YES;
     else

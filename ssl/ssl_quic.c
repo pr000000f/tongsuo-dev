@@ -111,15 +111,16 @@ int SSL_get_quic_transport_version(const SSL *ssl)
 
 size_t SSL_quic_max_handshake_flight_len(const SSL *ssl, OSSL_ENCRYPTION_LEVEL level)
 {
-    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
-
-    if (sc == NULL)
-        return 0;
     /*
      * Limits flights to 16K by default when there are no large
      * (certificate-carrying) messages.
      */
+    
     static const size_t DEFAULT_FLIGHT_LIMIT = 16384;
+    SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(ssl);
+
+    if (sc == NULL)
+        return 0;
 
     switch (level) {
     case ssl_encryption_initial:

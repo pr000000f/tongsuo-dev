@@ -6816,12 +6816,13 @@ int BABASSL_client_hello_get1_extensions(SSL *s, int **out, size_t *outlen)
 {
     int *exts, i = 0;
     size_t num = 0;
+    PACKET extensions;
     const SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(s);
 
     if (sc == NULL)
         return 0;
 
-    PACKET extensions = sc->clienthello->extensions;
+    extensions = sc->clienthello->extensions;
 
     while (PACKET_remaining(&extensions) > 0) {
         unsigned int type;
@@ -7650,13 +7651,14 @@ static int ssl_cipher_get_cert_index(const SSL_CIPHER *c)
 
 X509 *BABASSL_get_use_certificate(const SSL *s)
 {
+    int idx;
+    CERT *c = NULL;
     SSL_CONNECTION *sc = SSL_CONNECTION_FROM_SSL(s);
 
     if(sc == NULL)
         return NULL;
 
-    CERT *c = sc->cert;
-    int idx;
+    c = sc->cert;
 
     if (sc->s3.tmp.new_cipher == NULL)
         return NULL;
