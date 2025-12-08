@@ -560,6 +560,12 @@ extern "C" {
 /* OSSL_DECODER input type if a decoder is used by the store */
 #define OSSL_STORE_PARAM_INPUT_TYPE "input-type"   /* UTF8_STRING */
 
+/* Libssl record layer */
+
+#define OSSL_LIBSSL_RECORD_LAYER_PARAM_OPTIONS    "options"
+#define OSSL_LIBSSL_RECORD_LAYER_PARAM_MODE       "mode"
+#define OSSL_LIBSSL_RECORD_LAYER_PARAM_READ_AHEAD "read_ahead"
+
 # ifdef __cplusplus
 }
 # endif
