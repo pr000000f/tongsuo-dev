@@ -273,6 +273,47 @@ __owur static ossl_inline int PACKET_get_quic_vlint(PACKET *pkt,
     return 1;
 }
 
+/*
+ * Decodes a QUIC variable-length integer in |pkt| and stores the result in
+ * |data|. Unlike PACKET_get_quic_vlint, this does not advance the current
+ * position.
+ */
+__owur static ossl_inline int PACKET_peek_quic_vlint(PACKET *pkt,
+                                                     uint64_t *data)
+{
+    size_t enclen;
+
+    if (PACKET_remaining(pkt) < 1)
+        return 0;
+
+    enclen = ossl_quic_vlint_decode_len(*pkt->curr);
+
+    if (PACKET_remaining(pkt) < enclen)
+        return 0;
+
+    *data = ossl_quic_vlint_decode_unchecked(pkt->curr);
+    return 1;
+}
+
+/*
+ * Skips over a QUIC variable-length integer in |pkt| without decoding it.
+ */
+__owur static ossl_inline int PACKET_skip_quic_vlint(PACKET *pkt)
+{
+    size_t enclen;
+
+    if (PACKET_remaining(pkt) < 1)
+        return 0;
+
+    enclen = ossl_quic_vlint_decode_len(*pkt->curr);
+
+    if (PACKET_remaining(pkt) < enclen)
+        return 0;
+
+    packet_forward(pkt, enclen);
+    return 1;
+}
+
 /* Equivalent of n2l */
 /* Get 4 bytes in network order from |pkt| and store the value in |*data| */
 __owur static ossl_inline int PACKET_get_net_4(PACKET *pkt, unsigned long *data)
