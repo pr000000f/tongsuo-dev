@@ -227,8 +227,10 @@ static int test_free_buffers(int test)
             readlen += strlen(testdata);
 
         if (!TEST_true(SSL_read_ex(serverssl, buf, readlen, &readbytes))
-                || !TEST_size_t_eq(readlen, readbytes))
+                || !TEST_size_t_eq(readlen, readbytes)){
+            printf("pipeline: %d, readlen: %ld, readbyte: %ld\n", pipeline, readlen, readbytes);
             goto end;
+        }
     } else {
         BIO *tmp;
         size_t partial_len;
