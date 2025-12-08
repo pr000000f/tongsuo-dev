@@ -418,6 +418,9 @@ int ossl_x509v3_cache_extensions(X509 *x)
         CRYPTO_THREAD_unlock(x->lock);
         return (x->ex_flags & EXFLAG_INVALID) == 0;
     }
+
+    ERR_set_mark();
+
 #ifdef SMTC_MODULE
     /* Cache the SM3 digest of the cert */
     if (!X509_digest(x, EVP_sm3(), x->sm3_hash, NULL))
@@ -426,8 +429,6 @@ int ossl_x509v3_cache_extensions(X509 *x)
     if (!X509_digest(x, EVP_sha1(), x->sha1_hash, NULL))
 #endif
         x->ex_flags |= EXFLAG_NO_FINGERPRINT;
-
-    ERR_set_mark();
 
     /* V1 should mean no extensions ... */
     if (X509_get_version(x) == X509_VERSION_1)
@@ -579,8 +580,6 @@ int ossl_x509v3_cache_extensions(X509 *x)
     res = setup_crldp(x);
     if (res == 0)
         x->ex_flags |= EXFLAG_INVALID;
-    else if (res < 0)
-        goto err;
 
 #ifndef OPENSSL_NO_RFC3779
     x->rfc3779_addr = X509_get_ext_d2i(x, NID_sbgp_ipAddrBlock, &i, NULL);
@@ -633,17 +632,13 @@ int ossl_x509v3_cache_extensions(X509 *x)
      */
 #endif
     ERR_pop_to_mark();
-    if ((x->ex_flags & (EXFLAG_INVALID | EXFLAG_NO_FINGERPRINT)) == 0) {
+
+    if ((x->ex_flags & EXFLAG_INVALID) == 0) {
         CRYPTO_THREAD_unlock(x->lock);
         return 1;
     }
-    if ((x->ex_flags & EXFLAG_INVALID) != 0)
-        ERR_raise(ERR_LIB_X509, X509V3_R_INVALID_CERTIFICATE);
-    /* If computing sha1_hash failed the error queue already reflects this. */
-
- err:
-    x->ex_flags |= EXFLAG_SET; /* indicate that cert has been processed */
     CRYPTO_THREAD_unlock(x->lock);
+    ERR_raise(ERR_LIB_X509, X509V3_R_INVALID_CERTIFICATE);
     return 0;
 }
 
