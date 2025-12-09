@@ -294,6 +294,9 @@ OSSL_RECORD_LAYER *(*new_record_layer)(OSSL_LIB_CTX *libctx,
 
 /* Standard built-in record methods */
 extern const OSSL_RECORD_METHOD ossl_tls_record_method;
+# ifndef OPENSSL_NO_KTLS
+extern const OSSL_RECORD_METHOD ossl_ktls_record_method;
+# endif
 extern const OSSL_RECORD_METHOD ossl_dtls_record_method;
 
 #endif /* !defined(OSSL_INTERNAL_RECORDMETHOD_H) */
