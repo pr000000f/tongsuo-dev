@@ -227,12 +227,12 @@ int tls1_change_cipher_state(SSL_CONNECTION *s, int which)
     }
 
     if (which & SSL3_CC_READ) {
-        if (SSL_CONNECTION_IS_DTLS(s)) {
-            if (s->ext.use_etm)
-                s->s3.flags |= TLS1_FLAGS_ENCRYPT_THEN_MAC_READ;
-            else
-                s->s3.flags &= ~TLS1_FLAGS_ENCRYPT_THEN_MAC_READ;
+        if (s->ext.use_etm)
+            s->s3.flags |= TLS1_FLAGS_ENCRYPT_THEN_MAC_READ;
+        else
+            s->s3.flags &= ~TLS1_FLAGS_ENCRYPT_THEN_MAC_READ;
 
+        if (SSL_CONNECTION_IS_DTLS(s)) {
             if (s->enc_read_ctx != NULL) {
                 reuse_dd = 1;
             } else if ((s->enc_read_ctx = EVP_CIPHER_CTX_new()) == NULL) {
@@ -406,7 +406,7 @@ int tls1_change_cipher_state(SSL_CONNECTION *s, int which)
         goto skip_ktls;
 
     /* check that cipher is supported */
-    if (!ktls_check_supported_cipher(s, c, taglen))
+    if (!ktls_check_supported_cipher(s, c, m, taglen))
         goto skip_ktls;
 
     if (which & SSL3_CC_WRITE)
