@@ -175,10 +175,6 @@ static int tls1_cipher(OSSL_RECORD_LAYER *rl, SSL3_RECORD *recs, size_t n_recs,
         if (ivlen > 1) {
             for (ctr = 0; ctr < n_recs; ctr++) {
                 if (recs[ctr].data != recs[ctr].input) {
-                    /*
-                        * we can't write into the input stream: Can this ever
-                        * happen?? (steve)
-                        */
                     RLAYERfatal(rl, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
                     return 0;
                 } else if (RAND_bytes_ex(rl->libctx, recs[ctr].input,
@@ -202,9 +198,9 @@ static int tls1_cipher(OSSL_RECORD_LAYER *rl, SSL3_RECORD *recs, size_t n_recs,
         if ((EVP_CIPHER_get_flags(EVP_CIPHER_CTX_get0_cipher(ds))
                 & EVP_CIPH_FLAG_PIPELINE) == 0) {
             /*
-                * We shouldn't have been called with pipeline data if the
-                * cipher doesn't support pipelining
-                */
+             * We shouldn't have been called with pipeline data if the
+             * cipher doesn't support pipelining
+             */
             RLAYERfatal(rl, SSL_AD_INTERNAL_ERROR, SSL_R_PIPELINE_FAILURE);
             return 0;
         }
@@ -252,9 +248,9 @@ static int tls1_cipher(OSSL_RECORD_LAYER *rl, SSL3_RECORD *recs, size_t n_recs,
 
         } else if ((bs != 1) && sending && !provided) {
             /*
-                * We only do this for legacy ciphers. Provided ciphers add the
-                * padding on the provider side.
-                */
+             * We only do this for legacy ciphers. Provided ciphers add the
+             * padding on the provider side.
+             */
             padnum = bs - (reclen[ctr] % bs);
 
             /* Add weird padding of up to 256 bytes */
@@ -318,10 +314,10 @@ static int tls1_cipher(OSSL_RECORD_LAYER *rl, SSL3_RECORD *recs, size_t n_recs,
         recs[0].length = outlen;
 
         /*
-            * The length returned from EVP_CipherUpdate above is the actual
-            * payload length. We need to adjust the data/input ptr to skip over
-            * any explicit IV
-            */
+         * The length returned from EVP_CipherUpdate above is the actual
+         * payload length. We need to adjust the data/input ptr to skip over
+         * any explicit IV
+         */
         if (!sending) {
             if (EVP_CIPHER_get_mode(enc) == EVP_CIPH_GCM_MODE) {
                     recs[0].data += EVP_GCM_TLS_EXPLICIT_IV_LEN;
@@ -389,9 +385,9 @@ static int tls1_cipher(OSSL_RECORD_LAYER *rl, SSL3_RECORD *recs, size_t n_recs,
                 }
 
                 /*
-                    * If using Mac-then-encrypt, then this will succeed but
-                    * with a random MAC if padding is invalid
-                    */
+                 * If using Mac-then-encrypt, then this will succeed but
+                 * with a random MAC if padding is invalid
+                 */
                 if (!tls1_cbc_remove_padding_and_mac(&recs[ctr].length,
                                         recs[ctr].orig_len,
                                         recs[ctr].data,
