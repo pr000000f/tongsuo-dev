@@ -1194,7 +1194,6 @@ tls_new_record_layer(OSSL_LIB_CTX *libctx, const char *propq, int vers,
 
 static void tls_int_free(OSSL_RECORD_LAYER *rl)
 {
-    /* TODO(RECLAYER): Cleanse sensitive fields */
     BIO_free(rl->prev);
     BIO_free(rl->bio);
     BIO_free(rl->next);
@@ -1205,6 +1204,9 @@ static void tls_int_free(OSSL_RECORD_LAYER *rl)
 #ifndef OPENSSL_NO_COMP
     COMP_CTX_free(rl->expand);
 #endif
+
+    if (rl->version == SSL3_VERSION)
+        OPENSSL_cleanse(rl->mac_secret, sizeof(rl->mac_secret));
 
     OPENSSL_free(rl);
 }
