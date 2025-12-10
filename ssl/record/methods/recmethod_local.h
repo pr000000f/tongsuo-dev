@@ -174,6 +174,16 @@ struct ossl_record_layer_st
     record_pqueue unprocessed_rcds;
     record_pqueue processed_rcds;
 
+    /* records being received in the current epoch */
+    DTLS1_BITMAP bitmap;
+    /* renegotiation starts a new set of sequence numbers */
+    DTLS1_BITMAP next_bitmap;
+
+    /*
+     * Whether we are currently in a hanshake or not. Only maintained for DTLS
+     */
+    int in_init;
+
     /* Callbacks */
     void *cbarg;
     OSSL_FUNC_rlayer_skip_early_data_fn *skip_early_data;
