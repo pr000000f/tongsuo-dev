@@ -449,7 +449,6 @@ static int tls_get_more_records(OSSL_RECORD_LAYER *rl,
     PACKET pkt, sslv2pkt;
     SSL_MAC_BUF *macbufs = NULL;
     int ret = OSSL_RECORD_RETURN_FATAL;
-    SSL *ssl = SSL_CONNECTION_GET_SSL(s);
 
     rr = rl->rrec;
     rbuf = &rl->rbuf;
@@ -528,9 +527,7 @@ static int tls_get_more_records(OSSL_RECORD_LAYER *rl,
                 if (!PACKET_get_1(&pkt, &type)
                         || !PACKET_get_net_2(&pkt, &version)
                         || !PACKET_get_net_2_len(&pkt, &thisrr->length)) {
-                    if (s->msg_callback)
-                        s->msg_callback(0, 0, SSL3_RT_HEADER, p, 5, ssl,
-                                        s->msg_callback_arg);
+                    rl->msg_callback(0, 0, SSL3_RT_HEADER, p, 5, rl->cbarg);
                     RLAYERfatal(rl, SSL_AD_DECODE_ERROR, ERR_R_INTERNAL_ERROR);
                     return OSSL_RECORD_RETURN_FATAL;
                 }
@@ -549,9 +546,7 @@ static int tls_get_more_records(OSSL_RECORD_LAYER *rl,
                     return OSSL_RECORD_RETURN_FATAL;
                 }
 
-                if (s->msg_callback)
-                    s->msg_callback(0, version, SSL3_RT_HEADER, p, 5, ssl,
-                                    s->msg_callback_arg);
+                rl->msg_callback(0, version, SSL3_RT_HEADER, p, 5, rl->cbarg);
 
                 if (thisrr->length >
                     SSL3_BUFFER_get_len(rbuf) - SSL3_RT_HEADER_LENGTH) {
@@ -693,7 +688,7 @@ static int tls_get_more_records(OSSL_RECORD_LAYER *rl,
             }
             thisrr->length -= mac_size;
             mac = thisrr->data + thisrr->length;
-            i = ssl->method->ssl3_enc->mac(s, thisrr, md, 0 /* not send */ );
+            i = rl->funcs->mac(rl, thisrr, md, 0 /* not send */, s);
             if (i == 0 || CRYPTO_memcmp(md, mac, mac_size) != 0) {
                 RLAYERfatal(rl, SSL_AD_BAD_RECORD_MAC,
                             SSL_R_DECRYPTION_FAILED_OR_BAD_RECORD_MAC);
@@ -732,7 +727,7 @@ static int tls_get_more_records(OSSL_RECORD_LAYER *rl,
             /* RLAYERfatal() already got called */
             goto end;
         }
-        if (num_recs == 1 && rl->rlayer_skip_early_data(rl->cbarg)) {
+        if (num_recs == 1 && rl->skip_early_data(rl->cbarg)) {
             /*
              * Valid early_data that we cannot decrypt will fail here. We treat
              * it like an empty record.
@@ -944,8 +939,6 @@ int tls_default_post_process_record(OSSL_RECORD_LAYER *rl, SSL3_RECORD *rec, SSL
 int tls13_common_post_process_record(OSSL_RECORD_LAYER *rl, SSL3_RECORD *rec,
                                      SSL_CONNECTION *s)
 {
-    SSL *ssl = SSL_CONNECTION_GET_SSL(s);
-
     if (rec->type != SSL3_RT_APPLICATION_DATA
             && rec->type != SSL3_RT_ALERT
             && rec->type != SSL3_RT_HANDSHAKE) {
@@ -953,9 +946,8 @@ int tls13_common_post_process_record(OSSL_RECORD_LAYER *rl, SSL3_RECORD *rec,
         return 0;
     }
 
-    if (s->msg_callback)
-        s->msg_callback(0, rl->version, SSL3_RT_INNER_CONTENT_TYPE,
-                        &rec->type, 1, ssl, s->msg_callback_arg);
+    rl->msg_callback(0, rl->version, SSL3_RT_INNER_CONTENT_TYPE, &rec->type,
+                        1, rl->cbarg);
 
     /*
      * TLSv1.3 alert and handshake records are required to be non-zero in
@@ -1137,7 +1129,10 @@ tls_int_new_record_layer(OSSL_LIB_CTX *libctx, const char *propq, int vers,
     for (; fns->function_id != 0; fns++) {
         switch (fns->function_id) {
         case OSSL_FUNC_RLAYER_SKIP_EARLY_DATA:
-            rl->rlayer_skip_early_data = OSSL_FUNC_rlayer_skip_early_data(fns);
+            rl->skip_early_data = OSSL_FUNC_rlayer_skip_early_data(fns);
+            break;
+        case OSSL_FUNC_RLAYER_MSG_CALLBACK:
+            rl->msg_callback = OSSL_FUNC_rlayer_msg_callback(fns);
             break;
         default:
             /* Just ignore anything we don't understand */
