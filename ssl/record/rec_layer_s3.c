@@ -1280,7 +1280,7 @@ int ssl3_read_bytes(SSL *ssl, int type, int *recvd_type, unsigned char *buf,
                     s->rrlmethod->read_record(s->rrl, &rr->rechandle,
                                               &rr->version, &rr->type,
                                               &rr->data, &rr->length,
-                                              NULL, NULL, s));
+                                              NULL, NULL));
             if (ret <= 0) {
                 /* SSLfatal() already called if appropriate */
                 return ret;
@@ -1817,6 +1817,10 @@ static int ssl_post_record_layer_select(SSL_CONNECTION *s)
 #endif
     if (SSL_IS_FIRST_HANDSHAKE(s) && s->rrlmethod->set_first_handshake != NULL)
         s->rrlmethod->set_first_handshake(s->rrl, 1);
+
+    if (s->max_pipelines != 0 && s->rrlmethod->set_max_pipelines != NULL)
+        s->rrlmethod->set_max_pipelines(s->rrl, s->max_pipelines);
+
     return 1;
 }
 
@@ -1830,7 +1834,7 @@ int ssl_set_new_record_layer(SSL_CONNECTION *s, int version,
                              const SSL_COMP *comp)
 {
     OSSL_PARAM options[4], *opts = options;
-    OSSL_PARAM settings[4], *set =  settings;
+    OSSL_PARAM settings[6], *set =  settings;
     const OSSL_RECORD_METHOD *origmeth = s->rrlmethod;
     SSL_CTX *sctx = SSL_CONNECTION_GET_CTX(s);
     const OSSL_RECORD_METHOD *meth;
@@ -1859,7 +1863,7 @@ int ssl_set_new_record_layer(SSL_CONNECTION *s, int version,
                                           &s->options);
     *opts++ = OSSL_PARAM_construct_uint32(OSSL_LIBSSL_RECORD_LAYER_PARAM_MODE,
                                           &s->mode);
-    *opts++ = OSSL_PARAM_construct_int(OSSL_LIBSSL_RECORD_LAYER_PARAM_MODE,
+    *opts++ = OSSL_PARAM_construct_int(OSSL_LIBSSL_RECORD_LAYER_PARAM_READ_AHEAD,
                                        &s->rlayer.read_ahead);
     *opts = OSSL_PARAM_construct_end();
 
@@ -1921,7 +1925,7 @@ int ssl_set_new_record_layer(SSL_CONNECTION *s, int version,
                                                mactype, md, comp, prev, s->rbio,
                                                s->rrlnext, NULL, NULL, settings,
                                                options, rlayer_dispatch, s,
-                                               &s->rrl, s);
+                                               &s->rrl);
         BIO_free(prev);
         switch (rlret) {
         case OSSL_RECORD_RETURN_FATAL:
