@@ -700,10 +700,6 @@ int tls_get_more_records(OSSL_RECORD_LAYER *rl)
         }
     }
 
-    /*
-     * TODO(RECLAYER): Only call rl functions once TLSv1.3/SSLv3 is moved to new
-     * record layer code
-     */
     enc_err = rl->funcs->cipher(rl, rr, num_recs, 0, macbufs, mac_size);
 
     /*-
@@ -1017,7 +1013,6 @@ tls_int_new_record_layer(OSSL_LIB_CTX *libctx, const char *propq, int vers,
                          size_t keylen, unsigned char *iv, size_t ivlen,
                          unsigned char *mackey, size_t mackeylen,
                          const EVP_CIPHER *ciph, size_t taglen,
-                         /* TODO(RECLAYER): This probably should not be an int */
                          int mactype,
                          const EVP_MD *md, const SSL_COMP *comp, BIO *prev,
                          BIO *transport, BIO *next, BIO_ADDR *local,
@@ -1152,7 +1147,6 @@ tls_new_record_layer(OSSL_LIB_CTX *libctx, const char *propq, int vers,
                      unsigned char *key, size_t keylen, unsigned char *iv,
                      size_t ivlen, unsigned char *mackey, size_t mackeylen,
                      const EVP_CIPHER *ciph, size_t taglen,
-                     /* TODO(RECLAYER): This probably should not be an int */
                      int mactype,
                      const EVP_MD *md, const SSL_COMP *comp, BIO *prev, 
                      BIO *transport, BIO *next, BIO_ADDR *local, BIO_ADDR *peer,
