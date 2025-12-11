@@ -5741,4 +5741,11 @@ CMS_SignedData_free                     ?	3_1_0	EXIST::FUNCTION:CMS
 CMS_SignedData_new                      ?	3_1_0	EXIST::FUNCTION:CMS
 CMS_SignedData_verify                   ?	3_1_0	EXIST::FUNCTION:CMS
 BIO_s_dgram_mem                         ?	3_1_0	EXIST::FUNCTION:
+BIO_recvmmsg                            ?	3_1_0	EXIST::FUNCTION:
+BIO_sendmmsg                            ?	3_1_0	EXIST::FUNCTION:
+BIO_meth_set_sendmmsg                   ?	3_1_0	EXIST::FUNCTION:
+BIO_meth_get_sendmmsg                   ?	3_1_0	EXIST::FUNCTION:
+BIO_meth_set_recvmmsg                   ?	3_1_0	EXIST::FUNCTION:
+BIO_meth_get_recvmmsg                   ?	3_1_0	EXIST::FUNCTION:
+BIO_err_is_non_fatal                    ?	3_1_0	EXIST::FUNCTION:SOCK
 X509_PUBKEY_set0_public_key             ?	3_1_0	EXIST::FUNCTION:
