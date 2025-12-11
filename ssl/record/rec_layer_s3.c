@@ -1769,6 +1769,7 @@ int ssl_set_new_record_layer(SSL_CONNECTION *s, int version,
         return 0;
     }
 
+    s->rlayer.rrl = NULL;
     if (meth != NULL)
         s->rlayer.rrlmethod = meth;
 
