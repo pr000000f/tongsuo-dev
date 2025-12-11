@@ -650,8 +650,6 @@ int tls13_change_cipher_state(SSL_CONNECTION *s, int which)
 
     if (which & SSL3_CC_READ) {
         iv = s->read_iv;
-
-        RECORD_LAYER_reset_read_sequence(&s->rlayer);
     } else {
         s->statem.enc_write_state = ENC_WRITE_STATE_INVALID;
         if (s->enc_write_ctx != NULL) {
@@ -941,10 +939,11 @@ int tls13_change_cipher_state(SSL_CONNECTION *s, int which)
     }
 
     /* configure kernel crypto structure */
-    if (which & SSL3_CC_WRITE)
-        rl_sequence = RECORD_LAYER_get_write_sequence(&s->rlayer);
-    else
-        rl_sequence = RECORD_LAYER_get_read_sequence(&s->rlayer);
+    /*
+     * If we get here we are only doing the write side. The read side goes
+     * through the new record layer code.
+     */
+    rl_sequence = RECORD_LAYER_get_write_sequence(&s->rlayer);
 
     if (!ktls_configure_crypto(sctx->libctx, s->version, cipher, NULL,
                                rl_sequence, &crypto_info, which & SSL3_CC_WRITE,
@@ -999,7 +998,6 @@ int tls13_update_key(SSL_CONNECTION *s, int sending)
     } else {
         iv = s->read_iv;
         ciph_ctx = s->enc_read_ctx;
-        RECORD_LAYER_reset_read_sequence(&s->rlayer);
     }
 
     if (!derive_secret_key_and_iv(s, sending, ssl_handshake_md(s),

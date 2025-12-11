@@ -183,8 +183,6 @@ static void dtls_unbuffer_record(SSL_CONNECTION *s)
                         sizeof(rdata->recordinfo), &rdata->recordinfo);
         }
 #endif
-        /* Set proper sequence number for mac calculation */
-        memcpy(&(s->rlayer.read_sequence[2]), &(rdata->seq_num[2]), 6);
 
         OPENSSL_free(item->data);
         pitem_free(item);
@@ -849,10 +847,8 @@ int do_dtls1_write(SSL_CONNECTION *sc, int type, const unsigned char *buf,
 void dtls1_reset_seq_numbers(SSL_CONNECTION *s, int rw)
 {
     unsigned char *seq;
-    unsigned int seq_bytes = sizeof(s->rlayer.read_sequence);
 
     if (rw & SSL3_CC_READ) {
-        seq = s->rlayer.read_sequence;
         s->rlayer.d->r_epoch++;
 
         /*
@@ -865,7 +861,6 @@ void dtls1_reset_seq_numbers(SSL_CONNECTION *s, int rw)
         memcpy(s->rlayer.d->last_write_sequence, seq,
                sizeof(s->rlayer.write_sequence));
         s->rlayer.d->w_epoch++;
+        memset(seq, 0, sizeof(s->rlayer.write_sequence));
     }
-
-    memset(seq, 0, seq_bytes);
 }
