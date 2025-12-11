@@ -70,15 +70,6 @@ int RECORD_LAYER_read_pending(const RECORD_LAYER *rl)
     return rl->rrlmethod->unprocessed_read_pending(rl->rrl);
 }
 
-int RECORD_LAYER_data_present(const RECORD_LAYER *rl)
-{
-    if (rl->rstate == SSL_ST_READ_BODY)
-        return 1;
-    if (RECORD_LAYER_processed_read_pending(rl))
-        return 1;
-    return 0;
-}
-
 /* Checks if we have decrypted unread record data pending */
 int RECORD_LAYER_processed_read_pending(const RECORD_LAYER *rl)
 {
