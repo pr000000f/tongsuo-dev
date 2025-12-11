@@ -591,9 +591,6 @@ int tls_get_more_records(OSSL_RECORD_LAYER *rl)
         thisrr->data = thisrr->input;
         thisrr->orig_len = thisrr->length;
 
-        /* Mark this record as not read by upper layers yet */
-        thisrr->read = 0;
-
         num_recs++;
 
         /* we have pulled in a full packet so zero things */
@@ -630,7 +627,6 @@ int tls_get_more_records(OSSL_RECORD_LAYER *rl)
                         SSL_R_UNEXPECTED_CCS_MESSAGE);
             return OSSL_RECORD_RETURN_FATAL;
         }
-        thisrr->read = 1;
         rl->num_recs = 0;
         rl->curr_rec = 0;
         rl->num_released = 0;
@@ -717,7 +713,6 @@ int tls_get_more_records(OSSL_RECORD_LAYER *rl)
             }
 
             thisrr->length = 0;
-            thisrr->read = 1;
             rl->num_recs = 0;
             rl->curr_rec = 0;
             rl->num_released = 0;
