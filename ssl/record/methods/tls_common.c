@@ -1335,6 +1335,29 @@ void tls_set_max_pipelines(OSSL_RECORD_LAYER *rl, size_t max_pipelines)
         rl->read_ahead = 1;
 }
 
+void tls_get_state(OSSL_RECORD_LAYER *rl, const char **shortstr,
+                   const char **longstr)
+{
+    const char *shrt, *lng;
+    switch (rl->rstate) {
+    case SSL_ST_READ_HEADER:
+        shrt = "RH";
+        lng = "read header";
+        break;
+    case SSL_ST_READ_BODY:
+        shrt = "RB";
+        lng = "read body";
+        break;
+    default:
+        shrt = lng = "unknown";
+        break;
+    }
+    if (shortstr != NULL)
+        *shortstr = shrt;
+    if (longstr != NULL)
+        *longstr = lng;
+}
+
 const OSSL_RECORD_METHOD ossl_tls_record_method = {
     tls_new_record_layer,
     tls_free,
@@ -1355,5 +1378,6 @@ const OSSL_RECORD_METHOD ossl_tls_record_method = {
     tls_set_plain_alerts,
     tls_set_first_handshake,
     tls_set_max_pipelines,
-    NULL
+    NULL,
+    tls_get_state
 };
