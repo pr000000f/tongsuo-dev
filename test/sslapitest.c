@@ -41,6 +41,7 @@
 #include "internal/nelem.h"
 #include "internal/ktls.h"
 #include "../ssl/ssl_local.h"
+#include "../ssl/record/methods/recmethod_local.h"
 #include "filterprov.h"
 
 #undef OSSL_NO_USABLE_TLS1_3
@@ -9979,6 +9980,7 @@ end:
  * Test 6: Repeat of test 0, but the engine is loaded late (after the SSL_CTX
  *         is created)
  */
+#if 0
 static int test_pipelining(int idx)
 {
     SSL_CTX *cctx = NULL, *sctx = NULL;
@@ -10157,6 +10159,8 @@ end:
         OPENSSL_free(msg);
     return testresult;
 }
+#endif
+
 #endif /* !defined(OPENSSL_NO_TLS1_2) && !defined(OPENSSL_NO_DYNAMIC_ENGINE) */
 
 #ifndef OPENSSL_NO_CERT_COMPRESSION

@@ -2060,7 +2060,8 @@ MSG_PROCESS_RETURN tls_process_client_certificate_ntls(SSL_CONNECTION *s, PACKET
      * longer tolerate unencrypted alerts. This value is ignored if less than
      * TLSv1.3
      */
-    s->statem.enc_read_state = ENC_READ_STATE_VALID;
+    if (s->rlayer.rrlmethod->set_plain_alerts != NULL)
+        s->rlayer.rrlmethod->set_plain_alerts(s->rlayer.rrl, 0);
 
     if ((sk = sk_X509_new_null()) == NULL) {
         SSLfatal_ntls(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);

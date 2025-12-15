@@ -219,9 +219,16 @@ void ossl_rlayer_fatal(OSSL_RECORD_LAYER *rl, int al, int reason,
      ERR_set_debug(OPENSSL_FILE, OPENSSL_LINE, OPENSSL_FUNC),      \
      ossl_rlayer_fatal)
 
-#define RLAYER_USE_EXPLICIT_IV(rl) ((rl)->version == TLS1_1_VERSION \
-                                    || (rl)->version == TLS1_2_VERSION \
-                                    || (rl)->isdtls)
+#ifndef OPENSSL_NO_NTLS
+    #define RLAYER_USE_EXPLICIT_IV(rl) ((rl)->version == TLS1_1_VERSION \
+                                        || (rl)->version == TLS1_2_VERSION \
+                                        || (rl)->version == NTLS_VERSION \
+                                        || (rl)->isdtls)
+#else
+    #define RLAYER_USE_EXPLICIT_IV(rl) ((rl)->version == TLS1_1_VERSION \
+                                        || (rl)->version == TLS1_2_VERSION \
+                                        || (rl)->isdtls)
+#endif
 
 int ossl_set_tls_provider_parameters(OSSL_RECORD_LAYER *rl,
                                      EVP_CIPHER_CTX *ctx,

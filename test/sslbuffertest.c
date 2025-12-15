@@ -172,6 +172,7 @@ static int test_func(int test)
  * Test 4-7: We repeat tests 0-3 but including data from a second pipelined
  *           record
  */
+#if 0
 static int test_free_buffers(int test)
 {
     int result = 0;
@@ -324,6 +325,7 @@ static int test_free_buffers(int test)
 #endif
     return result;
 }
+#endif
 
 OPT_TEST_DECLARE_USAGE("certfile privkeyfile\n")
 
@@ -349,13 +351,13 @@ int setup_tests(void)
     }
 
     ADD_ALL_TESTS(test_func, 9);
-    /*
+/*
 #if !defined(OPENSSL_NO_TLS1_2) && !defined(OPENSSL_NO_DYNAMIC_ENGINE)
     ADD_ALL_TESTS(test_free_buffers, 8);
 #else
     ADD_ALL_TESTS(test_free_buffers, 4);
 #endif
-    */
+*/
     return 1;
 }
 

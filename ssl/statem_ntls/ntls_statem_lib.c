@@ -528,6 +528,7 @@ MSG_PROCESS_RETURN tls_process_change_cipher_spec_ntls(SSL_CONNECTION *s, PACKET
 {
     size_t remain;
 
+    printf("tls_process_change_cipher_spec_ntls a\n");
     remain = PACKET_remaining(pkt);
     /*
      * 'Change Cipher Spec' is just a single byte, which should already have
@@ -544,11 +545,15 @@ MSG_PROCESS_RETURN tls_process_change_cipher_spec_ntls(SSL_CONNECTION *s, PACKET
         return MSG_PROCESS_ERROR;
     }
 
+    printf("tls_process_change_cipher_spec_ntls b\n");
+
     s->s3.change_cipher_spec = 1;
     if (!ssl3_do_change_cipher_spec(s)) {
         SSLfatal_ntls(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
         return MSG_PROCESS_ERROR;
     }
+
+    printf("tls_process_change_cipher_spec_ntls c\n");
 
     return MSG_PROCESS_CONTINUE_READING;
 }
@@ -557,7 +562,6 @@ MSG_PROCESS_RETURN tls_process_finished_ntls(SSL_CONNECTION *s, PACKET *pkt)
 {
     size_t md_len;
 
-
     /* This is a real handshake so make sure we clean it up at the end */
     if (s->server) {
         /*
@@ -565,7 +569,8 @@ MSG_PROCESS_RETURN tls_process_finished_ntls(SSL_CONNECTION *s, PACKET *pkt)
         * no longer tolerate unencrypted alerts. This value is ignored if less
         * than TLSv1.3
         */
-        s->statem.enc_read_state = ENC_READ_STATE_VALID;
+        if (s->rlayer.rrlmethod->set_plain_alerts != NULL)
+            s->rlayer.rrlmethod->set_plain_alerts(s->rlayer.rrl, 0);
         if (s->post_handshake_auth != SSL_PHA_REQUESTED)
             s->statem.cleanuphand = 1;
     }
@@ -945,8 +950,7 @@ int tls_get_message_header_ntls(SSL_CONNECTION *s, int *mt)
          * Total message size is the remaining record bytes to read
          * plus the SSL3_HM_HEADER_LENGTH bytes that we already read
          */
-        l = RECORD_LAYER_get_rrec_length(&s->rlayer)
-            + SSL3_HM_HEADER_LENGTH;
+        l = s->rlayer.tlsrecs[0].length + SSL3_HM_HEADER_LENGTH;
         s->s3.tmp.message_size = l;
 
         s->init_msg = s->init_buf->data;

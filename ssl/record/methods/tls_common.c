@@ -1191,6 +1191,7 @@ tls_new_record_layer(OSSL_LIB_CTX *libctx, const char *propq, int vers,
 #ifndef OPENSSL_NO_NTLS
     case NTLS_VERSION:
         /* NTLS TODO: add ntls funcs*/
+        (*retrl)->funcs = &tls_1_funcs;
         break;
 #endif
     default:
