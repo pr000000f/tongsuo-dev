@@ -1253,8 +1253,8 @@ SSL_R_ATTEMPT_TO_REUSE_SESSION_IN_DIFFERENT_CONTEXT:272:\
 	attempt to reuse session in different context
 SSL_R_AT_LEAST_TLS_1_2_NEEDED_IN_SUITEB_MODE:158:\
 	at least (D)TLS 1.2 needed in Suite B mode
-SSL_R_BAD_CERTIFICATE_SIGNATURE_TYPE:321:bad certificate signature type
-SSL_R_BAD_CERTIFICATE_USAGE:322:bad certificate usage
+SSL_R_BAD_CERTIFICATE_SIGNATURE_TYPE:351:bad certificate signature type
+SSL_R_BAD_CERTIFICATE_USAGE:350:bad certificate usage
 SSL_R_BAD_CHANGE_CIPHER_SPEC:103:bad change cipher spec
 SSL_R_BAD_CIPHER:186:bad cipher
 SSL_R_BAD_DATA:390:bad data
@@ -1400,7 +1400,7 @@ SSL_R_MISSING_ENC_CERTIFICATE:346:missing encryption certificate
 SSL_R_MISSING_FATAL:256:missing fatal
 SSL_R_MISSING_PARAMETERS:290:missing parameters
 SSL_R_MISSING_PSK_KEX_MODES_EXTENSION:310:missing psk kex modes extension
-SSL_R_MISSING_QUIC_TRANSPORT_PARAMETERS_EXTENSION:313:\
+SSL_R_MISSING_QUIC_TRANSPORT_PARAMETERS_EXTENSION:355:\
 	missing quic transport parameters extension
 SSL_R_MISSING_RSA_CERTIFICATE:168:missing rsa certificate
 SSL_R_MISSING_RSA_ENCRYPTING_CERT:169:missing rsa encrypting cert
@@ -1510,7 +1510,7 @@ SSL_R_SSL_SESSION_ID_CONTEXT_TOO_LONG:273:ssl session id context too long
 SSL_R_SSL_SESSION_ID_HAS_BAD_LENGTH:303:ssl session id has bad length
 SSL_R_SSL_SESSION_ID_TOO_LONG:408:ssl session id too long
 SSL_R_SSL_SESSION_VERSION_MISMATCH:210:ssl session version mismatch
-SSL_R_STATUS_CALLBACK_ERROR:317:status callback error
+SSL_R_STATUS_CALLBACK_ERROR:356:status callback error
 SSL_R_STILL_IN_INIT:121:still in init
 SSL_R_TLS_ILLEGAL_EXPORTER_LABEL:367:tls illegal exporter label
 SSL_R_TLS_INVALID_ECPOINTFORMAT_LIST:157:tls invalid ecpointformat list
@@ -1537,7 +1537,7 @@ SSL_R_UNKNOWN_CMD_NAME:386:unknown cmd name
 SSL_R_UNKNOWN_COMMAND:139:unknown command
 SSL_R_UNKNOWN_DIGEST:368:unknown digest
 SSL_R_UNKNOWN_KEY_EXCHANGE_TYPE:250:unknown key exchange type
-SSL_R_UNKNOWN_MANDATORY_PARAMETER:323:unknown mandatory parameter
+SSL_R_UNKNOWN_MANDATORY_PARAMETER:365:unknown mandatory parameter
 SSL_R_UNKNOWN_PKEY_TYPE:251:unknown pkey type
 SSL_R_UNKNOWN_PROTOCOL:252:unknown protocol
 SSL_R_UNKNOWN_SSL_VERSION:254:unknown ssl version
@@ -1556,7 +1556,7 @@ SSL_R_VERSION_TOO_LOW:396:version too low
 SSL_R_WRONG_CERTIFICATE_TYPE:383:wrong certificate type
 SSL_R_WRONG_CIPHER_RETURNED:261:wrong cipher returned
 SSL_R_WRONG_CURVE:378:wrong curve
-SSL_R_WRONG_ENCRYPTION_LEVEL_RECEIVED:316:wrong encryption level received
+SSL_R_WRONG_ENCRYPTION_LEVEL_RECEIVED:366:wrong encryption level received
 SSL_R_WRONG_PUBLIC_KEY_TYPE:349:wrong public key type
 SSL_R_WRONG_SIGNATURE_LENGTH:264:wrong signature length
 SSL_R_WRONG_SIGNATURE_SIZE:265:wrong signature size

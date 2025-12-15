@@ -11216,7 +11216,7 @@ int setup_tests(void)
 #endif
     ADD_TEST(test_load_dhfile);
 #if !defined(OPENSSL_NO_TLS1_2) && !defined(OPENSSL_NO_DYNAMIC_ENGINE)
-    //ADD_ALL_TESTS(test_pipelining, 7);
+    /*ADD_ALL_TESTS(test_pipelining, 7);*/
 #endif
     ADD_ALL_TESTS(test_multi_resume, 5);
     ADD_ALL_TESTS(test_select_next_proto, OSSL_NELEM(next_proto_tests));
