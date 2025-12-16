@@ -9,6 +9,7 @@
 
 #include "internal/e_os.h"
 #include "internal/sockets.h"
+#include "internal/bio_addr.h"
 
 /* BEGIN BIO_ADDRINFO/BIO_ADDR stuff. */
 
@@ -59,17 +60,6 @@ struct bio_addrinfo_st {
     struct bio_addrinfo_st *bai_next;
 };
 # endif
-
-union bio_addr_st {
-    struct sockaddr sa;
-# ifdef AF_INET6
-    struct sockaddr_in6 s_in6;
-# endif
-    struct sockaddr_in s_in;
-# ifdef AF_UNIX
-    struct sockaddr_un s_un;
-# endif
-};
 #endif
 
 /* END BIO_ADDRINFO/BIO_ADDR stuff. */
