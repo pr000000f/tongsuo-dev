@@ -139,6 +139,7 @@ static const struct trace_category_st trace_categories[] = {
     TRACE_CATEGORY_(DECODER),
     TRACE_CATEGORY_(ENCODER),
     TRACE_CATEGORY_(REF_COUNT),
+    TRACE_CATEGORY_(HTTP),
 #ifdef SMTC_MODULE
     TRACE_CATEGORY_(SMTC),
 #endif
