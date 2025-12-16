@@ -1,20 +1,10 @@
 diff a/test/build.info b/test/build.info	(rejected hunks)
-@@ -964,13 +964,17 @@ ENDIF
-   ENDIF
- 
-   IF[{- !$disabled{'quic'} -}]
--    PROGRAMS{noinst}=quicapitest quic_wire_test
-+    PROGRAMS{noinst}=quicapitest quic_wire_test quic_ackm_test
-   ENDIF
- 
-   SOURCE[quicapitest]=quicapitest.c helpers/ssltestlib.c
-   INCLUDE[quicapitest]=../include ../apps/include
-   DEPEND[quicapitest]=../libcrypto ../libssl libtestutil.a
- 
-+  SOURCE[quic_ackm_test]=quic_ackm_test.c
-+  INCLUDE[quic_ackm_test]=../include ../apps/include
-+  DEPEND[quic_ackm_test]=../libcrypto.a ../libssl.a libtestutil.a
-+
- {-
-    use File::Spec::Functions;
-    use File::Basename;
+@@ -49,7 +49,7 @@ IF[{- !$disabled{tests} -}]
+           packettest asynctest secmemtest srptest memleaktest stack_test \
+           dtlsv1listentest ct_test threadstest afalgtest d2i_test \
+           ssl_test_ctx_test ssl_test x509aux cipherlist_test asynciotest \
+-          bio_callback_test bio_memleak_test bio_core_test param_build_test \
++          bio_callback_test bio_memleak_test bio_core_test bio_dgram_test param_build_test \
+           bioprinttest sslapitest dtlstest sslcorrupttest \
+           bio_enc_test pkey_meth_test pkey_meth_kdf_test evp_kdf_test uitest \
+           cipherbytes_test threadstest_fips \
