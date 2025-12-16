@@ -1,10 +1,10 @@
 diff a/test/build.info b/test/build.info	(rejected hunks)
-@@ -968,7 +972,7 @@ ENDIF
-   ENDIF
+@@ -63,7 +63,7 @@ IF[{- !$disabled{tests} -}]
+           keymgmt_internal_test hexstr_test provider_status_test defltfips_test \
+           bio_readbuffer_test user_property_test pkcs7_test upcallstest \
+           provfetchtest prov_config_test rand_test ca_internals_test \
+-          bio_tfo_test membio_test
++          bio_tfo_test membio_test list_test
  
-   IF[{- !$disabled{'quic'} -}]
--    PROGRAMS{noinst}=quicapitest quic_wire_test quic_ackm_test
-+    PROGRAMS{noinst}=quicapitest quic_wire_test quic_ackm_test quic_record_test
-   ENDIF
- 
-   SOURCE[quicapitest]=quicapitest.c helpers/ssltestlib.c
+   IF[{- !$disabled{'deprecated-3.0'} -}]
+     PROGRAMS{noinst}=enginetest
