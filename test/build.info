@@ -1005,13 +1005,6 @@ IF[{- !$disabled{tests} -}]
     DEPEND[ssl_ntls_api_test]=../libcrypto ../libssl libtestutil.a
   ENDIF
 
-  IF[{- !$disabled{'quic'} -}]
-    PROGRAMS{noinst}=quicapitest quic_wire_test
-    SOURCE[quicapitest]=quicapitest.c helpers/ssltestlib.c
-    INCLUDE[quicapitest]=.. ../include ../apps/include
-    DEPEND[quicapitest]=../libcrypto ../libssl libtestutil.a
-  ENDIF
-
   IF[{- !$disabled{'ec'} -}]
     PROGRAMS{noinst}=ecpmeth_test
     SOURCE[ecpmeth_test]=ecpmeth_test.c helpers/ssltestlib.c
@@ -1039,12 +1032,16 @@ ENDIF
   DEPEND[ssl_ctx_test]=../libcrypto ../libssl libtestutil.a
 
   IF[{- !$disabled{'quic'} -}]
-    PROGRAMS{noinst}=quicapitest
+    PROGRAMS{noinst}=quicapitest quic_wire_test quic_ackm_test
   ENDIF
 
   SOURCE[quicapitest]=quicapitest.c helpers/ssltestlib.c
   INCLUDE[quicapitest]=../include ../apps/include
   DEPEND[quicapitest]=../libcrypto ../libssl libtestutil.a
+
+  SOURCE[quic_ackm_test]=quic_ackm_test.c
+  INCLUDE[quic_ackm_test]=../include ../apps/include
+  DEPEND[quic_ackm_test]=../libcrypto.a ../libssl.a libtestutil.a
 
 {-
    use File::Spec::Functions;
