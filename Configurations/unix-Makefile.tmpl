@@ -904,8 +904,11 @@ generate: generate_crypto_bn generate_crypto_objects \
 #coverage: $(PROGRAMS) $(TESTPROGRAMS)
 #	...
 
+.PHONY: lint
 lint:
-	lint -DLINT $(INCLUDES) $(SRCS)
+	@( cd $(SRCDIR); \
+           echo splint -DLINT -posixlib -preproc -D__gnuc_va_list=void \
+	   -I. -Iinclude -Iapps/include $(CRYPTOHEADERS) $(SSLHEADERS) $(SRCS) )
 
 generate_crypto_bn:
 	( cd $(SRCDIR); $(PERL) crypto/bn/bn_prime.pl > crypto/bn/bn_prime.h )
