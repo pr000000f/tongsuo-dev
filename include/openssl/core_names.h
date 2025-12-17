@@ -574,6 +574,7 @@ extern "C" {
 #define OSSL_LIBSSL_RECORD_LAYER_PARAM_USE_ETM        "use_etm"
 #define OSSL_LIBSSL_RECORD_LAYER_PARAM_MAX_FRAG_LEN   "max_frag_len"
 #define OSSL_LIBSSL_RECORD_LAYER_PARAM_MAX_EARLY_DATA "max_early_data"
+#define OSSL_LIBSSL_RECORD_LAYER_PARAM_BLOCK_PADDING  "block_padding"
 
 # ifdef __cplusplus
 }
