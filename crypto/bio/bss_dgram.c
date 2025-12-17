@@ -301,7 +301,8 @@ static void dgram_adjust_rcv_timeout(BIO *b)
         sz.i = sizeof(timeout);
         if (getsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO,
                        (void *)&timeout, &sz.i) < 0) {
-            perror("getsockopt");
+            ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                           "calling getsockopt()");
         } else {
             data->socket_timeout.tv_sec = timeout / 1000;
             data->socket_timeout.tv_usec = (timeout % 1000) * 1000;
@@ -310,7 +311,8 @@ static void dgram_adjust_rcv_timeout(BIO *b)
         sz.i = sizeof(data->socket_timeout);
         if (getsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO,
                        &(data->socket_timeout), (void *)&sz) < 0) {
-            perror("getsockopt");
+            ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                           "calling getsockopt()");
         } else if (sizeof(sz.s) != sizeof(sz.i) && sz.i == 0)
             OPENSSL_assert(sz.s <= sizeof(data->socket_timeout));
 #  endif
@@ -345,14 +347,14 @@ static void dgram_adjust_rcv_timeout(BIO *b)
 #  ifdef OPENSSL_SYS_WINDOWS
             timeout = timeleft.tv_sec * 1000 + timeleft.tv_usec / 1000;
             if (setsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO,
-                           (void *)&timeout, sizeof(timeout)) < 0) {
-                perror("setsockopt");
-            }
+                           (void *)&timeout, sizeof(timeout)) < 0)
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
 #  else
             if (setsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO, &timeleft,
-                           sizeof(struct timeval)) < 0) {
-                perror("setsockopt");
-            }
+                           sizeof(struct timeval)) < 0)
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
 #  endif
         }
     }
@@ -391,15 +393,14 @@ static void dgram_reset_rcv_timeout(BIO *b)
         int timeout = data->socket_timeout.tv_sec * 1000 +
             data->socket_timeout.tv_usec / 1000;
         if (setsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO,
-                       (void *)&timeout, sizeof(timeout)) < 0) {
-            perror("setsockopt");
-        }
+                       (void *)&timeout, sizeof(timeout)) < 0)
+            ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                           "calling setsockopt()");
 #  else
-        if (setsockopt
-            (b->num, SOL_SOCKET, SO_RCVTIMEO, &(data->socket_timeout),
-             sizeof(struct timeval)) < 0) {
-            perror("setsockopt");
-        }
+        if (setsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO,
+                       &(data->socket_timeout), sizeof(struct timeval)) < 0)
+            ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                           "calling setsockopt()");
 #  endif
     }
 # endif
@@ -621,14 +622,16 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
             sockopt_val = IP_PMTUDISC_DO;
             if ((ret = setsockopt(b->num, IPPROTO_IP, IP_MTU_DISCOVER,
                                   &sockopt_val, sizeof(sockopt_val))) < 0)
-                perror("setsockopt");
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
             break;
 #  if OPENSSL_USE_IPV6 && defined(IPV6_MTU_DISCOVER) && defined(IPV6_PMTUDISC_DO)
         case AF_INET6:
             sockopt_val = IPV6_PMTUDISC_DO;
             if ((ret = setsockopt(b->num, IPPROTO_IPV6, IPV6_MTU_DISCOVER,
                                   &sockopt_val, sizeof(sockopt_val))) < 0)
-                perror("setsockopt");
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
             break;
 #  endif
         default:
@@ -748,18 +751,16 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
         {
             struct timeval *tv = (struct timeval *)ptr;
             int timeout = tv->tv_sec * 1000 + tv->tv_usec / 1000;
-            if (setsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO,
-                           (void *)&timeout, sizeof(timeout)) < 0) {
-                perror("setsockopt");
-                ret = -1;
-            }
+            if ((ret = setsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO,
+                                  (void *)&timeout, sizeof(timeout))) < 0)
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
         }
 #  else
-        if (setsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO, ptr,
-                       sizeof(struct timeval)) < 0) {
-            perror("setsockopt");
-            ret = -1;
-        }
+        if ((ret = setsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO, ptr,
+                              sizeof(struct timeval))) < 0)
+            ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                           "calling setsockopt()");
 #  endif
         break;
     case BIO_CTRL_DGRAM_GET_RECV_TIMEOUT:
@@ -777,7 +778,8 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
             sz.i = sizeof(timeout);
             if (getsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO,
                            (void *)&timeout, &sz.i) < 0) {
-                perror("getsockopt");
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling getsockopt()");
                 ret = -1;
             } else {
                 tv->tv_sec = timeout / 1000;
@@ -788,7 +790,8 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
             sz.i = sizeof(struct timeval);
             if (getsockopt(b->num, SOL_SOCKET, SO_RCVTIMEO,
                            ptr, (void *)&sz) < 0) {
-                perror("getsockopt");
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling getsockopt()");
                 ret = -1;
             } else if (sizeof(sz.s) != sizeof(sz.i) && sz.i == 0) {
                 OPENSSL_assert(sz.s <= sizeof(struct timeval));
@@ -805,18 +808,17 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
         {
             struct timeval *tv = (struct timeval *)ptr;
             int timeout = tv->tv_sec * 1000 + tv->tv_usec / 1000;
-            if (setsockopt(b->num, SOL_SOCKET, SO_SNDTIMEO,
-                           (void *)&timeout, sizeof(timeout)) < 0) {
-                perror("setsockopt");
-                ret = -1;
-            }
+
+            if ((ret = setsockopt(b->num, SOL_SOCKET, SO_SNDTIMEO,
+                                  (void *)&timeout, sizeof(timeout))) < 0)
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
         }
 #  else
-        if (setsockopt(b->num, SOL_SOCKET, SO_SNDTIMEO, ptr,
-                       sizeof(struct timeval)) < 0) {
-            perror("setsockopt");
-            ret = -1;
-        }
+        if ((ret = setsockopt(b->num, SOL_SOCKET, SO_SNDTIMEO, ptr,
+                              sizeof(struct timeval))) < 0)
+            ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                           "calling setsockopt()");
 #  endif
         break;
     case BIO_CTRL_DGRAM_GET_SEND_TIMEOUT:
@@ -834,7 +836,8 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
             sz.i = sizeof(timeout);
             if (getsockopt(b->num, SOL_SOCKET, SO_SNDTIMEO,
                            (void *)&timeout, &sz.i) < 0) {
-                perror("getsockopt");
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling getsockopt()");
                 ret = -1;
             } else {
                 tv->tv_sec = timeout / 1000;
@@ -845,7 +848,8 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
             sz.i = sizeof(struct timeval);
             if (getsockopt(b->num, SOL_SOCKET, SO_SNDTIMEO,
                            ptr, (void *)&sz) < 0) {
-                perror("getsockopt");
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling getsockopt()");
                 ret = -1;
             } else if (sizeof(sz.s) != sizeof(sz.i) && sz.i == 0) {
                 OPENSSL_assert(sz.s <= sizeof(struct timeval));
@@ -886,24 +890,21 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
         case AF_INET:
 # if defined(IP_DONTFRAG)
             if ((ret = setsockopt(b->num, IPPROTO_IP, IP_DONTFRAG,
-                                  &sockopt_val, sizeof(sockopt_val))) < 0) {
-                perror("setsockopt");
-                ret = -1;
-            }
+                                  &sockopt_val, sizeof(sockopt_val))) < 0)
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
 # elif defined(OPENSSL_SYS_LINUX) && defined(IP_MTU_DISCOVER) && defined (IP_PMTUDISC_PROBE)
             if ((sockopt_val = num ? IP_PMTUDISC_PROBE : IP_PMTUDISC_DONT),
                 (ret = setsockopt(b->num, IPPROTO_IP, IP_MTU_DISCOVER,
-                                  &sockopt_val, sizeof(sockopt_val))) < 0) {
-                perror("setsockopt");
-                ret = -1;
-            }
+                                  &sockopt_val, sizeof(sockopt_val))) < 0)
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
 # elif defined(OPENSSL_SYS_WINDOWS) && defined(IP_DONTFRAGMENT)
             if ((ret = setsockopt(b->num, IPPROTO_IP, IP_DONTFRAGMENT,
                                   (const char *)&sockopt_val,
-                                  sizeof(sockopt_val))) < 0) {
-                perror("setsockopt");
-                ret = -1;
-            }
+                                  sizeof(sockopt_val))) < 0)
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
 # else
             ret = -1;
 # endif
@@ -913,17 +914,16 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
 #  if defined(IPV6_DONTFRAG)
             if ((ret = setsockopt(b->num, IPPROTO_IPV6, IPV6_DONTFRAG,
                                   (const void *)&sockopt_val,
-                                  sizeof(sockopt_val))) < 0) {
-                perror("setsockopt");
-                ret = -1;
-            }
+                                  sizeof(sockopt_val))) < 0)
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
+
 #  elif defined(OPENSSL_SYS_LINUX) && defined(IPV6_MTUDISCOVER)
             if ((sockopt_val = num ? IP_PMTUDISC_PROBE : IP_PMTUDISC_DONT),
                 (ret = setsockopt(b->num, IPPROTO_IPV6, IPV6_MTU_DISCOVER,
-                                  &sockopt_val, sizeof(sockopt_val))) < 0) {
-                perror("setsockopt");
-                ret = -1;
-            }
+                                  &sockopt_val, sizeof(sockopt_val))) < 0)
+                ERR_raise_data(ERR_LIB_SYS, get_last_socket_error(),
+                               "calling setsockopt()");
 #  else
             ret = -1;
 #  endif
@@ -982,6 +982,9 @@ static long dgram_ctrl(BIO *b, int cmd, long num, void *ptr)
         ret = 0;
         break;
     }
+    /* Normalize if error */
+    if (ret < 0)
+        ret = -1;
     return ret;
 }
 
