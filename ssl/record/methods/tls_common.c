@@ -1491,7 +1491,7 @@ int tls_write_records_default(OSSL_RECORD_LAYER *rl,
     size_t align = 0;
     SSL3_BUFFER *wb;
     SSL_SESSION *sess;
-    size_t totlen = 0, len, wpinited = 0;
+    size_t len, wpinited = 0;
     size_t j, prefix = 0;
     int using_ktls;
     /* TODO(RECLAYER): REMOVE ME */
@@ -1621,7 +1621,6 @@ int tls_write_records_default(OSSL_RECORD_LAYER *rl,
         }
     }
 
-    totlen = 0;
     /* Clear our SSL3_RECORD structures */
     memset(wr, 0, sizeof(wr));
     for (j = 0; j < numtempl + prefix; j++) {
@@ -1675,7 +1674,6 @@ int tls_write_records_default(OSSL_RECORD_LAYER *rl,
         SSL3_RECORD_set_length(thiswr, thistempl->buflen);
 
         SSL3_RECORD_set_input(thiswr, (unsigned char *)thistempl->buf);
-        totlen += thistempl->buflen;
 
         /*
          * we now 'read' from thiswr->input, thiswr->length bytes into
