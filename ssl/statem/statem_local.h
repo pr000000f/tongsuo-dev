@@ -65,7 +65,7 @@ typedef enum {
     MSG_PROCESS_CONTINUE_READING
 } MSG_PROCESS_RETURN;
 
-typedef CON_FUNC_RETURN (*confunc_f) (SSL_CONNECTION *s, WPACKET *pkt);
+typedef int (*confunc_f) (SSL_CONNECTION *s, WPACKET *pkt);
 typedef MSG_PROCESS_RETURN (*profunc_f) (SSL_CONNECTION *s, PACKET *pkt);
 
 int ssl3_take_mac(SSL_CONNECTION *s);
@@ -563,10 +563,10 @@ __owur EXT_RETURN tls_construct_compress_cert(SSL_CONNECTION *s, WPACKET *pkt,
 __owur int tls_parse_compress_cert(SSL_CONNECTION *s, PACKET *pkt,
                                    unsigned int context,
                                    X509 *x, size_t chainidx);
-__owur int tls_construct_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt,
+__owur CON_FUNC_RETURN tls_construct_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt,
                                                 confunc_f confunc);
-__owur int tls_construct_client_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt);
-__owur int tls_construct_server_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt);
+__owur CON_FUNC_RETURN tls_construct_client_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt);
+__owur CON_FUNC_RETURN tls_construct_server_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt);
 __owur MSG_PROCESS_RETURN tls_process_compressed_certificate(SSL_CONNECTION *s,
                                                          PACKET *pkt,
                                                          profunc_f profunc);

@@ -731,7 +731,7 @@ CON_FUNC_RETURN tls_construct_key_update(SSL_CONNECTION *s, WPACKET *pkt)
     }
 
     s->key_update = SSL_KEY_UPDATE_NONE;
-    eturn CON_FUNC_SUCCESS;
+    return CON_FUNC_SUCCESS;
 }
 
 MSG_PROCESS_RETURN tls_process_key_update(SSL_CONNECTION *s, PACKET *pkt)
@@ -2573,7 +2573,7 @@ int tls13_restore_handshake_digest_for_pha(SSL_CONNECTION *s)
 }
 
 #ifndef OPENSSL_NO_CERT_COMPRESSION
-int tls_construct_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt,
+CON_FUNC_RETURN tls_construct_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt,
                                          confunc_f confunc)
 {
     SSL_cert_compress_cb_fn compress_fn = NULL;
@@ -2657,14 +2657,14 @@ int tls_construct_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt,
     BUF_MEM_free(buf);
     OPENSSL_free(compressed_msg);
 
-    return 1;
+    return CON_FUNC_SUCCESS;
 err:
     BUF_MEM_free(buf);
 
     if (compressed_msg != NULL)
         OPENSSL_free(compressed_msg);
 
-    return 0;
+    return CON_FUNC_ERROR;
 }
 
 MSG_PROCESS_RETURN tls_process_compressed_certificate(SSL_CONNECTION *s,

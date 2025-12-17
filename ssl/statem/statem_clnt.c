@@ -3767,7 +3767,7 @@ CON_FUNC_RETURN tls_construct_end_of_early_data(SSL_CONNECTION *s, WPACKET *pkt)
 }
 
 #ifndef OPENSSL_NO_CERT_COMPRESSION
-int tls_construct_client_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt)
+CON_FUNC_RETURN tls_construct_client_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt)
 {
     return tls_construct_compressed_certificate(s, pkt,
                             tls_construct_client_certificate);

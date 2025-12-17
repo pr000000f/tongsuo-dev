@@ -31,7 +31,7 @@
 
 #define TICKET_NONCE_SIZE       8
 
-static int tls_construct_encrypted_extensions(SSL_CONNECTION *s, WPACKET *pkt);
+static CON_FUNC_RETURN tls_construct_encrypted_extensions(SSL_CONNECTION *s, WPACKET *pkt);
 
 /*
  * ossl_statem_server13_read_transition() encapsulates the logic for the allowed
@@ -4245,7 +4245,7 @@ MSG_PROCESS_RETURN tls_process_end_of_early_data(SSL_CONNECTION *s, PACKET *pkt)
 }
 
 #ifndef OPENSSL_NO_CERT_COMPRESSION
-int tls_construct_server_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt)
+CON_FUNC_RETURN tls_construct_server_compressed_certificate(SSL_CONNECTION *s, WPACKET *pkt)
 {
     return tls_construct_compressed_certificate(s, pkt,
                         tls_construct_server_certificate);
