@@ -649,6 +649,9 @@ int tls13_change_cipher_state(SSL_CONNECTION *s, int which)
     const EVP_CIPHER *cipher = NULL;
     SSL_CTX *sctx = SSL_CONNECTION_GET_CTX(s);
     size_t keylen, ivlen, taglen;
+    int level;
+    int direction = (which & SSL3_CC_READ) != 0 ? OSSL_RECORD_DIRECTION_READ
+                                                : OSSL_RECORD_DIRECTION_WRITE;
 #if !defined(OPENSSL_NO_KTLS) && defined(OPENSSL_KTLS_TLS13)
     ktls_crypto_info_t crypto_info;
     void *rl_sequence;
@@ -898,20 +901,21 @@ int tls13_change_cipher_state(SSL_CONNECTION *s, int which)
     else
         s->statem.enc_write_state = ENC_WRITE_STATE_VALID;
 
+    level = (which & SSL3_CC_EARLY) != 0
+            ? OSSL_RECORD_PROTECTION_LEVEL_EARLY
+            : ((which &SSL3_CC_HANDSHAKE) != 0
+               ? OSSL_RECORD_PROTECTION_LEVEL_HANDSHAKE
+               : OSSL_RECORD_PROTECTION_LEVEL_APPLICATION);
+
+    if (!ssl_set_new_record_layer(s, s->version,
+                                  direction,
+                                  level, key, keylen, iv, ivlen, NULL, 0,
+                                  cipher, taglen, NID_undef, NULL, NULL)) {
+        /* SSLfatal already called */
+        goto err;
+    }
+
     if ((which & SSL3_CC_READ) != 0) {
-        int level = (which & SSL3_CC_EARLY) != 0
-                    ? OSSL_RECORD_PROTECTION_LEVEL_EARLY
-                    : ((which &SSL3_CC_HANDSHAKE) != 0
-                       ? OSSL_RECORD_PROTECTION_LEVEL_HANDSHAKE
-                       : OSSL_RECORD_PROTECTION_LEVEL_APPLICATION);
-        
-        if (!ssl_set_new_record_layer(s, s->version,
-                                    OSSL_RECORD_DIRECTION_READ,
-                                    level, key, keylen, iv, ivlen, NULL, 0,
-                                    cipher, taglen, NID_undef, NULL, NULL)) {
-            /* SSLfatal already called */
-            goto err;
-        }
         /* TODO(RECLAYER): Remove me when write rlayer done */
         goto skip_ktls;
     }
@@ -996,6 +1000,8 @@ int tls13_update_key(SSL_CONNECTION *s, int sending)
     EVP_CIPHER_CTX *ciph_ctx;
     size_t keylen, ivlen, taglen;
     int ret = 0;
+    int direction = sending ? OSSL_RECORD_DIRECTION_WRITE
+                            : OSSL_RECORD_DIRECTION_READ;
 
     if (s->server == sending)
         insecret = s->server_app_traffic_secret;
@@ -1023,16 +1029,14 @@ int tls13_update_key(SSL_CONNECTION *s, int sending)
 
     memcpy(insecret, secret, hashlen);
 
-    if (!sending) {
-        if (!ssl_set_new_record_layer(s, s->version,
-                                OSSL_RECORD_DIRECTION_READ,
-                                OSSL_RECORD_PROTECTION_LEVEL_APPLICATION,
-                                key, keylen, iv, ivlen, NULL, 0,
-                                s->s3.tmp.new_sym_enc, taglen, NID_undef, NULL,
-                                NULL)) {
-            /* SSLfatal already called */
-            goto err;
-        }
+    if (!ssl_set_new_record_layer(s, s->version,
+                            direction,
+                            OSSL_RECORD_PROTECTION_LEVEL_APPLICATION,
+                            key, keylen, iv, ivlen, NULL, 0,
+                            s->s3.tmp.new_sym_enc, taglen, NID_undef, NULL,
+                            NULL)) {
+        /* SSLfatal already called */
+        goto err;
     }
 
     s->statem.enc_write_state = ENC_WRITE_STATE_VALID;

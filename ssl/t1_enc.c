@@ -233,11 +233,11 @@ int tls1_change_cipher_state(SSL_CONNECTION *s, int which)
             s->s3.flags &= ~TLS1_FLAGS_ENCRYPT_THEN_MAC_READ;
 
         if (!ssl_set_new_record_layer(s, s->version,
-                                        OSSL_RECORD_DIRECTION_READ,
-                                        OSSL_RECORD_PROTECTION_LEVEL_APPLICATION,
-                                        key, cl, iv, (size_t)k, mac_secret,
-                                        mac_secret_size, c, taglen, mac_type,
-                                        m, comp)) {
+                                      OSSL_RECORD_DIRECTION_READ,
+                                      OSSL_RECORD_PROTECTION_LEVEL_APPLICATION,
+                                      key, cl, iv, (size_t)k, mac_secret,
+                                      mac_secret_size, c, taglen, mac_type,
+                                      m, comp)) {
             /* SSLfatal already called */
             goto err;
         }
@@ -250,6 +250,16 @@ int tls1_change_cipher_state(SSL_CONNECTION *s, int which)
             s->s3.flags |= TLS1_FLAGS_ENCRYPT_THEN_MAC_WRITE;
         else
             s->s3.flags &= ~TLS1_FLAGS_ENCRYPT_THEN_MAC_WRITE;
+
+        if (!ssl_set_new_record_layer(s, s->version,
+                                      OSSL_RECORD_DIRECTION_WRITE,
+                                      OSSL_RECORD_PROTECTION_LEVEL_APPLICATION,
+                                      key, cl, iv, (size_t)k, mac_secret,
+                                      mac_secret_size, c, taglen, mac_type,
+                                      m, comp)) {
+            /* SSLfatal already called */
+            goto err;
+        }
 
         if (s->enc_write_ctx != NULL && !SSL_CONNECTION_IS_DTLS(s)) {
             reuse_dd = 1;
