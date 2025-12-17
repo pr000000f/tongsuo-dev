@@ -293,6 +293,36 @@ int ossl_islower(int c)
     return ASCII_IS_LOWER(a);
 }
 
+/*
+ * Implement some of the simplier functions directly to avoid the overhead of
+ * accessing memory via ctype_char_map[].
+ */
+
+#define ASCII_IS_DIGIT(c)   (c >= 0x30 && c <= 0x39)
+#define ASCII_IS_UPPER(c)   (c >= 0x41 && c <= 0x5A)
+#define ASCII_IS_LOWER(c)   (c >= 0x61 && c <= 0x7A)
+
+int ossl_isdigit(int c)
+{
+    int a = ossl_toascii(c);
+
+    return ASCII_IS_DIGIT(a);
+}
+
+int ossl_isupper(int c)
+{
+    int a = ossl_toascii(c);
+
+    return ASCII_IS_UPPER(a);
+}
+
+int ossl_islower(int c)
+{
+    int a = ossl_toascii(c);
+
+    return ASCII_IS_LOWER(a);
+}
+
 #if defined(CHARSET_EBCDIC) && !defined(CHARSET_EBCDIC_TEST)
 static const int case_change = 0x40;
 #else
