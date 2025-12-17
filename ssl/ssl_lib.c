@@ -1410,8 +1410,6 @@ void ossl_ssl_connection_free(SSL *ssl)
     X509_VERIFY_PARAM_free(s->param);
     dane_final(&s->dane);
 
-    RECORD_LAYER_clear(&s->rlayer);
-
     /* Ignore return value */
     ssl_free_wbio_buffer(s);
 
@@ -1419,6 +1417,8 @@ void ossl_ssl_connection_free(SSL *ssl)
     s->wbio = NULL;
     BIO_free_all(s->rbio);
     s->rbio = NULL;
+
+    RECORD_LAYER_clear(&s->rlayer);
 
     BUF_MEM_free(s->init_buf);
 
@@ -1536,6 +1536,8 @@ void SSL_set0_wbio(SSL *s, BIO *wbio)
     /* Re-attach |bbio| to the new |wbio|. */
     if (sc->bbio != NULL)
         sc->wbio = BIO_push(sc->bbio, sc->wbio);
+
+    sc->rlayer.wrlmethod->set1_bio(sc->rlayer.wrl, sc->wbio);
 }
 
 void SSL_set_bio(SSL *s, BIO *rbio, BIO *wbio)
@@ -5408,6 +5410,8 @@ int ssl_init_wbio_buffer(SSL_CONNECTION *s)
     s->bbio = bbio;
     s->wbio = BIO_push(bbio, s->wbio);
 
+    s->rlayer.wrlmethod->set1_bio(s->rlayer.wrl, s->wbio);
+
     return 1;
 }
 
@@ -5418,6 +5422,8 @@ int ssl_free_wbio_buffer(SSL_CONNECTION *s)
         return 1;
 
     s->wbio = BIO_pop(s->wbio);
+    s->rlayer.wrlmethod->set1_bio(s->rlayer.wrl, s->wbio);
+
     BIO_free(s->bbio);
     s->bbio = NULL;
 
