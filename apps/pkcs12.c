@@ -1221,6 +1221,15 @@ void print_attribute(BIO *out, const ASN1_TYPE *av)
         BIO_printf(out, "\n");
         break;
 
+    case V_ASN1_OBJECT:
+        ln = OBJ_nid2ln(OBJ_obj2nid(av->value.object));
+        if (!ln)
+            ln = "";
+        OBJ_obj2txt(objbuf, sizeof(objbuf), av->value.object, 1);
+        BIO_printf(out, "%s (%s)", ln, objbuf);
+        BIO_printf(out, "\n");
+        break;
+
     default:
         BIO_printf(out, "<Unsupported tag %d>\n", av->type);
         break;

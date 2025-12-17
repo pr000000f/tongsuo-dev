@@ -218,6 +218,19 @@ static const PKCS12_ATTR ATTRS4[] = {
     { NULL, NULL }
 };
 
+static const PKCS12_ATTR ATTRS3[] = {
+    { "friendlyName", "wildduk" },
+    { "localKeyID", "1122334455" },
+    { "oracle-jdk-trustedkeyusage", "anyExtendedKeyUsage" },
+    { NULL, NULL }
+};
+
+static const PKCS12_ATTR ATTRS4[] = {
+    { "friendlyName", "wildduk" },
+    { "localKeyID", "1122334455" },
+    { NULL, NULL }
+};
+
 static const PKCS12_ENC enc_default = {
 #ifndef OPENSSL_NO_DES
     NID_pbe_WithSHA1And3_Key_TripleDES_CBC,
