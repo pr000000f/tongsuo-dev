@@ -34,13 +34,6 @@
 #  error openssl/bio.h included before bio_local.h
 # endif
 
-/*
- * Undefine AF_UNIX on systems that define it but don't support it.
- */
-# if defined(OPENSSL_SYS_WINDOWS)
-#  undef AF_UNIX
-# endif
-
 # ifdef AI_PASSIVE
 
 #  define bio_addrinfo_st addrinfo
