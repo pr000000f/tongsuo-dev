@@ -3771,6 +3771,10 @@ static int create_ticket_prequel(SSL_CONNECTION *s, WPACKET *pkt,
     return 1;
 }
 
+/*
+ * Returns 1 on success, 0 to abort construction of the ticket (non-fatal), or
+ * -1 on fatal error
+ */
 static CON_FUNC_RETURN construct_stateless_ticket(SSL_CONNECTION *s,
                                                   WPACKET *pkt,
                                                   uint32_t age_add,
@@ -3989,6 +3993,20 @@ static int construct_stateful_ticket(SSL_CONNECTION *s, WPACKET *pkt,
     return 1;
 }
 
+static void tls_update_ticket_counts(SSL_CONNECTION *s)
+{
+    /*
+     * Increment both |sent_tickets| and |next_ticket_nonce|. |sent_tickets|
+     * gets reset to 0 if we send more tickets following a post-handshake
+     * auth, but |next_ticket_nonce| does not.  If we're sending extra
+     * tickets, decrement the count of pending extra tickets.
+     */
+    s->sent_tickets++;
+    s->next_ticket_nonce++;
+    if (s->ext.extra_tickets_expected > 0)
+        s->ext.extra_tickets_expected--;
+}
+
 CON_FUNC_RETURN tls_construct_new_session_ticket(SSL_CONNECTION *s, WPACKET *pkt)
 {
     SSL_CTX *tctx = s->session_ctx;
@@ -4120,16 +4138,7 @@ CON_FUNC_RETURN tls_construct_new_session_ticket(SSL_CONNECTION *s, WPACKET *pkt
             /* SSLfatal() already called */
             goto err;
         }
-        /*
-         * Increment both |sent_tickets| and |next_ticket_nonce|. |sent_tickets|
-         * gets reset to 0 if we send more tickets following a post-handshake
-         * auth, but |next_ticket_nonce| does not.  If we're sending extra
-         * tickets, decrement the count of pending extra tickets.
-         */
-        s->sent_tickets++;
-        s->next_ticket_nonce++;
-        if (s->ext.extra_tickets_expected > 0)
-            s->ext.extra_tickets_expected--;
+        tls_update_ticket_counts(s);
         ssl_update_cache(s, SSL_SESS_CACHE_SERVER);
     }
 
