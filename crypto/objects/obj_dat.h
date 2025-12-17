@@ -2583,12 +2583,15 @@ static const unsigned int sn_objs[NUM_SN] = {
      925,    /* "brainpoolP224r1" */
      926,    /* "brainpoolP224t1" */
      927,    /* "brainpoolP256r1" */
+    1285,    /* "brainpoolP256r1tls13" */
      928,    /* "brainpoolP256t1" */
      929,    /* "brainpoolP320r1" */
      930,    /* "brainpoolP320t1" */
      931,    /* "brainpoolP384r1" */
+    1286,    /* "brainpoolP384r1tls13" */
      932,    /* "brainpoolP384t1" */
      933,    /* "brainpoolP512r1" */
+    1287,    /* "brainpoolP512r1tls13" */
      934,    /* "brainpoolP512t1" */
      494,    /* "buildingName" */
      860,    /* "businessCategory" */
@@ -3639,12 +3642,15 @@ static const unsigned int ln_objs[NUM_LN] = {
      925,    /* "brainpoolP224r1" */
      926,    /* "brainpoolP224t1" */
      927,    /* "brainpoolP256r1" */
+    1285,    /* "brainpoolP256r1tls13" */
      928,    /* "brainpoolP256t1" */
      929,    /* "brainpoolP320r1" */
      930,    /* "brainpoolP320t1" */
      931,    /* "brainpoolP384r1" */
+    1286,    /* "brainpoolP384r1tls13" */
      932,    /* "brainpoolP384t1" */
      933,    /* "brainpoolP512r1" */
+    1287,    /* "brainpoolP512r1tls13" */
      934,    /* "brainpoolP512t1" */
      494,    /* "buildingName" */
      860,    /* "businessCategory" */
