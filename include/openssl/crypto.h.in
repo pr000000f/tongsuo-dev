@@ -565,6 +565,8 @@ void OSSL_LIB_CTX_free(OSSL_LIB_CTX *);
 OSSL_LIB_CTX *OSSL_LIB_CTX_get0_global_default(void);
 OSSL_LIB_CTX *OSSL_LIB_CTX_set0_default(OSSL_LIB_CTX *libctx);
 
+void OSSL_sleep(uint64_t millis);
+
 void OSSL_enable_syslog(void);
 void OSSL_disable_syslog(void);
 void OSSL_syslog(int priority, const char *message, ...);
