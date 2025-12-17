@@ -274,6 +274,7 @@ static ossl_inline void ossl_sleep(unsigned long millis)
 }
 #else
 /* Fallback to a busy wait */
+# include "internal/time.h"
 static ossl_inline void ossl_sleep(unsigned long millis)
 {
     const OSSL_TIME finish = ossl_time_add(ossl_time_now(), ossl_ms2time(millis));
