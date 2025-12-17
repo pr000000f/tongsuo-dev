@@ -298,10 +298,8 @@ static CONF_MODULE *module_add(DSO *dso, const char *name,
         supported_modules = sk_CONF_MODULE_new_null();
     if (supported_modules == NULL)
         return NULL;
-    if ((tmod = OPENSSL_zalloc(sizeof(*tmod))) == NULL) {
-        ERR_raise(ERR_LIB_CONF, ERR_R_MALLOC_FAILURE);
+    if ((tmod = OPENSSL_zalloc(sizeof(*tmod))) == NULL)
         return NULL;
-    }
 
     tmod->dso = dso;
     tmod->name = OPENSSL_strdup(name);
@@ -381,16 +379,12 @@ static int module_init(CONF_MODULE *pmod, const char *name, const char *value,
 
     if (initialized_modules == NULL) {
         initialized_modules = sk_CONF_IMODULE_new_null();
-        if (!initialized_modules) {
-            ERR_raise(ERR_LIB_CONF, ERR_R_MALLOC_FAILURE);
+        if (!initialized_modules)
             goto err;
-        }
     }
 
-    if (!sk_CONF_IMODULE_push(initialized_modules, imod)) {
-        ERR_raise(ERR_LIB_CONF, ERR_R_MALLOC_FAILURE);
+    if (!sk_CONF_IMODULE_push(initialized_modules, imod))
         goto err;
-    }
 
     pmod->links++;
 

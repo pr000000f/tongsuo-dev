@@ -910,7 +910,7 @@ static void *v2i_IPAddrBlocks(const struct v3_ext_method *method,
     int i;
 
     if ((addr = sk_IPAddressFamily_new(IPAddressFamily_cmp)) == NULL) {
-        ERR_raise(ERR_LIB_X509V3, ERR_R_MALLOC_FAILURE);
+        ERR_raise(ERR_LIB_X509V3, ERR_R_CRYPTO_LIB);
         return NULL;
     }
 
@@ -965,10 +965,8 @@ static void *v2i_IPAddrBlocks(const struct v3_ext_method *method,
         } else {
             s = OPENSSL_strdup(val->value);
         }
-        if (s == NULL) {
-            ERR_raise(ERR_LIB_X509V3, ERR_R_MALLOC_FAILURE);
+        if (s == NULL)
             goto err;
-        }
 
         /*
          * Check for inheritance.  Not worth additional complexity to
@@ -1005,7 +1003,7 @@ static void *v2i_IPAddrBlocks(const struct v3_ext_method *method,
                 goto err;
             }
             if (!X509v3_addr_add_prefix(addr, afi, safi, min, prefixlen)) {
-                ERR_raise(ERR_LIB_X509V3, ERR_R_MALLOC_FAILURE);
+                ERR_raise(ERR_LIB_X509V3, ERR_R_X509V3_LIB);
                 goto err;
             }
             break;
@@ -1028,13 +1026,13 @@ static void *v2i_IPAddrBlocks(const struct v3_ext_method *method,
                 goto err;
             }
             if (!X509v3_addr_add_range(addr, afi, safi, min, max)) {
-                ERR_raise(ERR_LIB_X509V3, ERR_R_MALLOC_FAILURE);
+                ERR_raise(ERR_LIB_X509V3, ERR_R_X509V3_LIB);
                 goto err;
             }
             break;
         case '\0':
             if (!X509v3_addr_add_prefix(addr, afi, safi, min, length * 8)) {
-                ERR_raise(ERR_LIB_X509V3, ERR_R_MALLOC_FAILURE);
+                ERR_raise(ERR_LIB_X509V3, ERR_R_X509V3_LIB);
                 goto err;
             }
             break;
@@ -1219,7 +1217,7 @@ static int addr_validate_path_internal(X509_STORE_CTX *ctx,
         validation_err(X509_V_ERR_INVALID_EXTENSION);
     (void)sk_IPAddressFamily_set_cmp_func(ext, IPAddressFamily_cmp);
     if ((child = sk_IPAddressFamily_dup(ext)) == NULL) {
-        ERR_raise(ERR_LIB_X509V3, ERR_R_MALLOC_FAILURE);
+        ERR_raise(ERR_LIB_X509V3, ERR_R_CRYPTO_LIB);
         if (ctx != NULL)
             ctx->error = X509_V_ERR_OUT_OF_MEM;
         ret = 0;

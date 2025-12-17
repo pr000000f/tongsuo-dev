@@ -334,10 +334,8 @@ int ossl_decoder_ctx_setup_for_pkey(OSSL_DECODER_CTX *ctx,
         || (propquery != NULL
             && (process_data->propq = OPENSSL_strdup(propquery)) == NULL)
         || (process_data->keymgmts = sk_EVP_KEYMGMT_new_null()) == NULL
-        || (names = sk_OPENSSL_CSTRING_new_null()) == NULL) {
-        ERR_raise(ERR_LIB_OSSL_DECODER, ERR_R_MALLOC_FAILURE);
+        || (names = sk_OPENSSL_CSTRING_new_null()) == NULL)
         goto err;
-    }
 
     process_data->object = (void **)pkey;
     process_data->libctx = libctx;
@@ -433,7 +431,7 @@ OSSL_DECODER_CTX_new_for_pkey(EVP_PKEY **pkey,
     OSSL_DECODER_CTX *ctx = NULL;
 
     if ((ctx = OSSL_DECODER_CTX_new()) == NULL) {
-        ERR_raise(ERR_LIB_OSSL_DECODER, ERR_R_MALLOC_FAILURE);
+        ERR_raise(ERR_LIB_OSSL_DECODER, ERR_R_OSSL_DECODER_LIB);
         return NULL;
     }
 

@@ -74,7 +74,6 @@ OPENSSL_STACK *OPENSSL_sk_dup(const OPENSSL_STACK *sk)
     return ret;
 
  err:
-    ERR_raise(ERR_LIB_CRYPTO, ERR_R_MALLOC_FAILURE);
     OPENSSL_sk_free(ret);
     return NULL;
 }
@@ -123,7 +122,6 @@ OPENSSL_STACK *OPENSSL_sk_deep_copy(const OPENSSL_STACK *sk,
     return ret;
 
  err:
-    ERR_raise(ERR_LIB_CRYPTO, ERR_R_MALLOC_FAILURE);
     OPENSSL_sk_free(ret);
     return NULL;
 }
@@ -195,10 +193,8 @@ static int sk_reserve(OPENSSL_STACK *st, int n, int exact)
          * At this point, |st->num_alloc| and |st->num| are 0;
          * so |num_alloc| value is |n| or |min_nodes| if greater than |n|.
          */
-        if ((st->data = OPENSSL_zalloc(sizeof(void *) * num_alloc)) == NULL) {
-            ERR_raise(ERR_LIB_CRYPTO, ERR_R_MALLOC_FAILURE);
+        if ((st->data = OPENSSL_zalloc(sizeof(void *) * num_alloc)) == NULL)
             return 0;
-        }
         st->num_alloc = num_alloc;
         return 1;
     }

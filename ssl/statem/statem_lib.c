@@ -330,7 +330,7 @@ CON_FUNC_RETURN tls_construct_cert_verify(SSL_CONNECTION *s, WPACKET *pkt)
 
     mctx = EVP_MD_CTX_new();
     if (mctx == NULL) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_EVP_LIB);
         goto err;
     }
 
@@ -465,7 +465,7 @@ MSG_PROCESS_RETURN tls_process_cert_verify(SSL_CONNECTION *s, PACKET *pkt)
     SSL_CTX *sctx = SSL_CONNECTION_GET_CTX(s);
 
     if (mctx == NULL) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_EVP_LIB);
         goto err;
     }
 
@@ -1059,7 +1059,7 @@ static int ssl_add_cert_chain(SSL_CONNECTION *s, WPACKET *pkt, CERT_PKEY *cpk)
                                                        sctx->propq);
 
         if (xs_ctx == NULL) {
-            SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_X509_LIB);
             return 0;
         }
         if (!X509_STORE_CTX_init(xs_ctx, chain_store, x, NULL)) {
@@ -2404,7 +2404,7 @@ int parse_ca_names(SSL_CONNECTION *s, PACKET *pkt)
     PACKET cadns;
 
     if (ca_sk == NULL) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_CRYPTO_LIB);
         goto err;
     }
     /* get the CA RDNs */
@@ -2434,7 +2434,7 @@ int parse_ca_names(SSL_CONNECTION *s, PACKET *pkt)
         }
 
         if (!sk_X509_NAME_push(ca_sk, xn)) {
-            SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_CRYPTO_LIB);
             goto err;
         }
         xn = NULL;
@@ -2512,7 +2512,7 @@ size_t construct_key_exchange_tbs(SSL_CONNECTION *s, unsigned char **ptbs,
     unsigned char *tbs = OPENSSL_malloc(tbslen);
 
     if (tbs == NULL) {
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_CRYPTO_LIB);
         return 0;
     }
     memcpy(tbs, s->s3.client_random, SSL3_RANDOM_SIZE);

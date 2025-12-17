@@ -209,7 +209,7 @@ int OBJ_add_object(const ASN1_OBJECT *obj)
 
     return o->nid;
  err2:
-    ERR_raise(ERR_LIB_OBJ, ERR_R_MALLOC_FAILURE);
+    ERR_raise(ERR_LIB_OBJ, ERR_R_CRYPTO_LIB);
  err:
     for (i = ADDED_DATA; i <= ADDED_NID; i++)
         OPENSSL_free(ao[i]);
@@ -392,10 +392,8 @@ ASN1_OBJECT *OBJ_txt2obj(const char *s, int no_name)
     if (j < 0)
         return NULL;
 
-    if ((buf = OPENSSL_malloc(j)) == NULL) {
-        ERR_raise(ERR_LIB_OBJ, ERR_R_MALLOC_FAILURE);
+    if ((buf = OPENSSL_malloc(j)) == NULL)
         return NULL;
-    }
 
     p = buf;
     /* Write out tag+length */

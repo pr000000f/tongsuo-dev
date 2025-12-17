@@ -672,7 +672,7 @@ int tls13_change_cipher_state(SSL_CONNECTION *s, int which)
         } else {
             s->enc_write_ctx = EVP_CIPHER_CTX_new();
             if (s->enc_write_ctx == NULL) {
-                SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+                SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_EVP_LIB);
                 goto err;
             }
         }
@@ -730,7 +730,7 @@ int tls13_change_cipher_state(SSL_CONNECTION *s, int which)
              */
             mdctx = EVP_MD_CTX_new();
             if (mdctx == NULL) {
-                SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_MALLOC_FAILURE);
+                SSLfatal(s, SSL_AD_INTERNAL_ERROR, ERR_R_EVP_LIB);
                 goto err;
             }
 

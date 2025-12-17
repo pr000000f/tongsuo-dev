@@ -169,10 +169,8 @@ static int tree_init(X509_POLICY_TREE **ptree, STACK_OF(X509) *certs,
         return ret;
 
     /* If we get this far initialize the tree */
-    if ((tree = OPENSSL_zalloc(sizeof(*tree))) == NULL) {
-        ERR_raise(ERR_LIB_X509V3, ERR_R_MALLOC_FAILURE);
+    if ((tree = OPENSSL_zalloc(sizeof(*tree))) == NULL)
         return X509_PCY_TREE_INTERNAL;
-    }
 
     /* Limit the growth of the tree to mitigate CVE-2023-0464 */
     tree->node_maximum = OPENSSL_POLICY_TREE_NODES_MAX;
@@ -186,7 +184,6 @@ static int tree_init(X509_POLICY_TREE **ptree, STACK_OF(X509) *certs,
      */
     if ((tree->levels = OPENSSL_zalloc(sizeof(*tree->levels)*(n+1))) == NULL) {
         OPENSSL_free(tree);
-        ERR_raise(ERR_LIB_X509V3, ERR_R_MALLOC_FAILURE);
         return X509_PCY_TREE_INTERNAL;
     }
     tree->nlevel = n+1;

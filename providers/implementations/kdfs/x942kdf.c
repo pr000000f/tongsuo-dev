@@ -335,7 +335,7 @@ static void *x942kdf_new(void *provctx)
         return 0;
 
     if ((ctx = OPENSSL_zalloc(sizeof(*ctx))) == NULL)
-        ERR_raise(ERR_LIB_PROV, ERR_R_MALLOC_FAILURE);
+        return NULL;
     ctx->provctx = provctx;
     ctx->use_keybits = 1;
     return ctx;
