@@ -1064,6 +1064,7 @@ static const OSSL_DISPATCH rlayer_dispatch[] = {
 };
 
 static const OSSL_RECORD_METHOD *ssl_select_next_record_layer(SSL_CONNECTION *s,
+                                                              int direction,
                                                               int level)
 {
 
@@ -1083,7 +1084,8 @@ static const OSSL_RECORD_METHOD *ssl_select_next_record_layer(SSL_CONNECTION *s,
 #endif
 
     /* Default to the current OSSL_RECORD_METHOD */
-    return s->rlayer.rrlmethod;
+    return direction == OSSL_RECORD_DIRECTION_READ ? s->rlayer.rrlmethod
+                                                   : s->rlayer.wrlmethod;
 }
 
 static int ssl_post_record_layer_select(SSL_CONNECTION *s, int direction)
@@ -1140,7 +1142,7 @@ int ssl_set_new_record_layer(SSL_CONNECTION *s, int version,
     uint32_t max_early_data;
     COMP_METHOD *compm = (comp == NULL) ? NULL : comp->method;
 
-    meth = ssl_select_next_record_layer(s, level);
+    meth = ssl_select_next_record_layer(s, direction, level);
 
     if (direction == OSSL_RECORD_DIRECTION_READ) {
         thismethod = &s->rlayer.rrlmethod;
