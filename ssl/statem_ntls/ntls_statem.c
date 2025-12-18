@@ -134,10 +134,9 @@ void ossl_statem_send_fatal_ntls(SSL_CONNECTION *s, int al)
     /* We shouldn't call SSLfatal() twice. Once is enough */
     if (s->statem.in_init && s->statem.state == MSG_FLOW_ERROR)
         return;
-    s->statem.in_init = 1;
+    ossl_statem_set_in_init(s, 1);
     s->statem.state = MSG_FLOW_ERROR;
-    if (al != SSL_AD_NO_ALERT
-            && s->statem.enc_write_state != ENC_WRITE_STATE_INVALID)
+    if (al != SSL_AD_NO_ALERT)
         ssl3_send_alert(s, SSL3_AL_FATAL, al);
 }
 
@@ -395,10 +394,6 @@ int state_machine_ntls(SSL_CONNECTION *s, int server)
             buf = NULL;
         }
 
-        if (!ssl3_setup_buffers(s)) {
-            SSLfatal_ntls(s, SSL_AD_NO_ALERT, ERR_R_INTERNAL_ERROR);
-            goto end;
-        }
         s->init_num = 0;
 
         /*

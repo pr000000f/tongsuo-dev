@@ -2211,14 +2211,16 @@ int tls_construct_server_certificate_ntls(SSL_CONNECTION *s, WPACKET *pkt)
 static int create_ticket_prequel(SSL_CONNECTION *s, WPACKET *pkt, uint32_t age_add,
                                  unsigned char *tick_nonce)
 {
+    uint32_t timeout = (uint32_t)ossl_time2seconds(s->session->timeout);
+    if (s->hit)
+        timeout = 0;
     /*
      * Ticket lifetime hint: For TLSv1.2 this is advisory only and we leave this
      * unspecified for resumed session (for simplicity).
      * In TLSv1.3 we reset the "time" field above, and always specify the
      * timeout.
      */
-    if (!WPACKET_put_bytes_u32(pkt,
-                               s->hit ? 0 : (uint32_t)s->session->timeout)) {
+    if (!WPACKET_put_bytes_u32(pkt, timeout)) {
         SSLfatal_ntls(s, SSL_AD_INTERNAL_ERROR, ERR_R_INTERNAL_ERROR);
         return 0;
     }

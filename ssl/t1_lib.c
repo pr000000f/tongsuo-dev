@@ -95,8 +95,6 @@ SSL3_ENC_METHOD const TLSv1_3_enc_data = {
 
 #ifndef OPENSSL_NO_NTLS
 SSL3_ENC_METHOD const NTLS_enc_data = {
-    tls1_enc,
-    tls1_mac_old,
     tls1_setup_key_block,
     tls1_generate_master_secret,
     tls1_change_cipher_state,
