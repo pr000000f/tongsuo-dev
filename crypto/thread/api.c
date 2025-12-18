@@ -9,10 +9,7 @@
 
 #include <openssl/configuration.h>
 #include <openssl/thread.h>
-
-#if !defined(OPENSSL_NO_THREAD_POOL)
-    #include <internal/thread.h>
-#endif
+#include <internal/thread.h>
 
 uint32_t OSSL_get_thread_support_flags(void)
 {
