@@ -649,8 +649,6 @@ our %disabled = ( # "what"         => "comment"
                   "wbsm4-wsise"         => "default",
                   #"kyber"               => "default",
                   #"sm2dh-mlkem768-hybrid"  => "default",
-                  "thread-pool"         => "default", # Currently disabled for preprocessing modification of context
-                  "default-thread-pool" => "default", # Currently disabled for preprocessing modification of context
                 );
 
 # Note: => pair form used for aesthetics, not to truly make a hash table
