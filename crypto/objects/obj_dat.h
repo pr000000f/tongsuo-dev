@@ -2593,6 +2593,7 @@ static const unsigned int sn_objs[NUM_SN] = {
      933,    /* "brainpoolP512r1" */
     1287,    /* "brainpoolP512r1tls13" */
      934,    /* "brainpoolP512t1" */
+    1288,    /* "brotli" */
      494,    /* "buildingName" */
      860,    /* "businessCategory" */
      691,    /* "c2onb191v4" */
@@ -3406,6 +3407,7 @@ static const unsigned int ln_objs[NUM_LN] = {
      365,    /* "Basic OCSP Response" */
      285,    /* "Biometric Info" */
     1221,    /* "Brand Indicator for Message Identification" */
+    1288,    /* "Brotli compression" */
      179,    /* "CA Issuers" */
      785,    /* "CA Repository" */
     1219,    /* "CMC Archive Server" */

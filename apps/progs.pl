@@ -168,7 +168,7 @@ EOF
         "aes-128-cbc", "aes-128-ecb",
         "aes-192-cbc", "aes-192-ecb",
         "aes-256-cbc", "aes-256-ecb",
-        "base64", "zlib",
+        "base64", "zlib", "brotli",
         "des", "des3", "desx", "rc4", "rc4-40",
         "rc5",
         "des-ecb", "des-ede", "des-ede3",

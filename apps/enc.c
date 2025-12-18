@@ -147,6 +147,8 @@ int enc_main(int argc, char **argv)
     unsigned char *rawkey = NULL;
     int rawkeylen = 0;
 #endif
+    int do_brotli = 0;
+    BIO *bbrot = NULL;
 
     /* first check the command name */
     if (strcmp(argv[0], "base64") == 0)
@@ -154,6 +156,10 @@ int enc_main(int argc, char **argv)
 #ifdef ZLIB
     else if (strcmp(argv[0], "zlib") == 0)
         do_zlib = 1;
+#endif
+#ifndef OPENSSL_NO_BROTLI
+    else if (strcmp(argv[0], "brotli") == 0)
+        do_brotli = 1;
 #endif
     else if (strcmp(argv[0], "enc") != 0)
         ciphername = argv[0];
@@ -345,14 +351,18 @@ int enc_main(int argc, char **argv)
         BIO_printf(bio_err, "bufsize=%d\n", bsize);
 
 #ifdef ZLIB
-    if (!do_zlib)
+    if (do_zlib)
+        base64 = 0;
 #endif
-        if (base64) {
-            if (enc)
-                outformat = FORMAT_BASE64;
-            else
-                informat = FORMAT_BASE64;
-        }
+    if (do_brotli)
+        base64 = 0;
+
+    if (base64) {
+        if (enc)
+            outformat = FORMAT_BASE64;
+        else
+            informat = FORMAT_BASE64;
+    }
 
     strbuf = app_malloc(SIZE, "strbuf");
     buff = app_malloc(EVP_ENCODE_LENGTH(bsize), "evp buffer");
@@ -433,7 +443,8 @@ int enc_main(int argc, char **argv)
     rbio = in;
     wbio = out;
 
-#ifdef ZLIB
+#ifndef OPENSSL_NO_COMP
+# ifdef ZLIB
     if (do_zlib) {
         if ((bzl = BIO_new(BIO_f_zlib())) == NULL)
             goto end;
@@ -445,6 +456,20 @@ int enc_main(int argc, char **argv)
             wbio = BIO_push(bzl, wbio);
         else
             rbio = BIO_push(bzl, rbio);
+    }
+# endif
+
+    if (do_brotli) {
+        if ((bbrot = BIO_new(BIO_f_brotli())) == NULL)
+            goto end;
+        if (debug) {
+            BIO_set_callback_ex(bbrot, BIO_debug_callback_ex);
+            BIO_set_callback_arg(bbrot, (char *)bio_err);
+        }
+        if (enc)
+            wbio = BIO_push(bbrot, wbio);
+        else
+            rbio = BIO_push(bbrot, rbio);
     }
 #endif
 
@@ -719,6 +744,7 @@ int enc_main(int argc, char **argv)
     !defined(OPENSSL_NO_WBSM4_WSISE)
     OPENSSL_free(rawkey);
 #endif
+    BIO_free(bbrot);
     release_engine(e);
     OPENSSL_free(pass);
     return ret;

@@ -28,7 +28,7 @@ use OpenSSL::config;
 my $orig_death_handler = $SIG{__DIE__};
 $SIG{__DIE__} = \&death_handler;
 
-my $usage="Usage: Configure [no-<cipher> ...] [enable-<cipher> ...] [-Dxxx] [-lxxx] [-Lxxx] [-fxxx] [-Kxxx] [no-hw-xxx|no-hw] [[no-]threads] [[no-]thread-pool] [[no-]default-thread-pool] [[no-]shared] [[no-]zlib|zlib-dynamic] [no-asm] [no-egd] [sctp] [386] [--prefix=DIR] [--openssldir=OPENSSLDIR] [--system-ciphers-file=SYSTEMCIPHERFILE] [--with-xxx[=vvv]] [--config=FILE] os/compiler[:flags]\n";
+my $usage="Usage: Configure [no-<feature> ...] [enable-<feature> ...] [-Dxxx] [-lxxx] [-Lxxx] [-fxxx] [-Kxxx] [no-hw-xxx|no-hw] [[no-]threads] [[no-]thread-pool] [[no-]default-thread-pool] [[no-]shared] [[no-]zlib|zlib-dynamic] [no-asm] [no-egd] [sctp] [386] [--prefix=DIR] [--openssldir=OPENSSLDIR] [--system-ciphers-file=SYSTEMCIPHERFILE] [--with-xxx[=vvv]] [--config=FILE] os/compiler[:flags]\n";
 
 my $banner = <<"EOF";
 
@@ -88,7 +88,7 @@ EOF
 # no-egd        do not compile support for the entropy-gathering daemon APIs
 # [no-]zlib     [don't] compile support for zlib compression.
 # zlib-dynamic  Like "zlib", but the zlib library is expected to be a shared
-#               library and will be loaded in run-time by the OpenSSL library.
+#               library and will be loaded at run-time by the OpenSSL library.
 # sctp          include SCTP support
 # enable-quic   include QUIC support (currently just for developers as the
 #               implementation is by no means complete and usable)
@@ -423,6 +423,8 @@ my @disablables = (
     "autoalginit",
     "autoerrinit",
     "autoload-config",
+    "brotli",
+    "brotli-dynamic",
     "buildtest-c++",
     "bulk",
     "cached-fetch",
@@ -575,6 +577,8 @@ my %deprecated_disablables = (
 our %disabled = ( # "what"         => "comment"
                   "fips"                => "default",
                   "asan"                => "default",
+                  "brotli"              => "default",
+                  "brotli-dynamic"      => "default",
                   "buildtest-c++"       => "default",
                   "crypto-mdebug-count" => "default",
                   "crypto-mdebug"       => "default",
@@ -668,6 +672,7 @@ my @disable_cascades = (
     "ssl"               => [ "ssl3" ],
     "ssl3-method"       => [ "ssl3" ],
     "zlib"              => [ "zlib-dynamic" ],
+    "brotli"            => [ "brotli-dynamic" ],
     "ec"                => [ "ec2m", "ecdsa", "ecdh", "sm2", "sm2dh-mlkem768-hybrid"],
     "sm2"               => [ "sm2_threshold", "sm2dh-mlkem768-hybrid"],
     "ec_elgamal"        => [ "twisted_ec_elgamal" ],
@@ -714,7 +719,7 @@ my @disable_cascades = (
     "stdio"             => [ "apps", "capieng", "egd" ],
     "apps"              => [ "tests" ],
     "tests"             => [ "external-tests" ],
-    "comp"              => [ "zlib" ],
+    "comp"              => [ "zlib", "brotli" ],
     "sm3"               => [ "sm2" ],
     "sm4"               => [ "wbsm4-xiaolai", "wbsm4-baiwu", "wbsm4-wsise" ],
     sub { !$disabled{"unit-test"} } => [ "heartbeats" ],
@@ -971,6 +976,10 @@ while (@argvcopy)
                         {
                         delete $disabled{"zlib"};
                         }
+                elsif ($1 eq "brotli-dynamic")
+                        {
+                        delete $disabled{"brotli"};
+                        }
                 elsif ($1 eq "sdf-lib-dynamic")
                         {
                         delete $disabled{"sdf-lib"};
@@ -1054,6 +1063,14 @@ while (@argvcopy)
                 elsif (/^--with-zlib-include=(.*)$/)
                         {
                         $withargs{zlib_include}=$1;
+                        }
+                elsif (/^--with-brotli-lib=(.*)$/)
+                        {
+                        $withargs{brotli_lib}=$1;
+                        }
+                elsif (/^--with-brotli-include=(.*)$/)
+                        {
+                        $withargs{brotli_include}=$1;
                         }
                 elsif (/^--with-fuzzer-lib=(.*)$/)
                         {
