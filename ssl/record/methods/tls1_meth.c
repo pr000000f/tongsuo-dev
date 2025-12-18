@@ -162,7 +162,7 @@ static int tls1_cipher(OSSL_RECORD_LAYER *rl, SSL3_RECORD *recs, size_t n_recs,
     EVP_CIPHER_CTX *ds;
     size_t reclen[SSL_MAX_PIPELINES];
     unsigned char buf[SSL_MAX_PIPELINES][EVP_AEAD_TLS1_AAD_LEN];
-    int i, pad = 0, tmpr, provided;
+    int pad = 0, tmpr, provided;
     size_t bs, ctr, padnum, loop;
     unsigned char padval;
     const EVP_CIPHER *enc;
@@ -247,10 +247,9 @@ static int tls1_cipher(OSSL_RECORD_LAYER *rl, SSL3_RECORD *recs, size_t n_recs,
                 memcpy(buf[ctr], dtlsseq, 8);
             } else {
                 memcpy(buf[ctr], seq, 8);
-                for (i = 7; i >= 0; i--) { /* increment */
-                    ++seq[i];
-                    if (seq[i] != 0)
-                        break;
+                if (!tls_increment_sequence_ctr(rl)) {
+                    /* RLAYERfatal already called */
+                    return 0;
                 }
             }
 
@@ -436,7 +435,6 @@ static int tls1_mac(OSSL_RECORD_LAYER *rl, SSL3_RECORD *rec, unsigned char *md,
     unsigned char *seq = rl->sequence;
     EVP_MD_CTX *hash;
     size_t md_size;
-    int i;
     EVP_MD_CTX *hmac = NULL, *mac_ctx;
     unsigned char header[13];
     int t;
@@ -499,13 +497,11 @@ static int tls1_mac(OSSL_RECORD_LAYER *rl, SSL3_RECORD *rec, unsigned char *md,
         BIO_dump_indent(trc_out, rec->data, rec->length, 4);
     } OSSL_TRACE_END(TLS);
 
-    if (!rl->isdtls) {
-        for (i = 7; i >= 0; i--) {
-            ++seq[i];
-            if (seq[i] != 0)
-                break;
-        }
+    if (!rl->isdtls && !tls_increment_sequence_ctr(rl)) {
+        /* RLAYERfatal already called */
+        goto end;
     }
+
     OSSL_TRACE_BEGIN(TLS) {
         BIO_printf(trc_out, "md:\n");
         BIO_dump_indent(trc_out, md, md_size, 4);
