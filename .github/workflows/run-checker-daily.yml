@@ -82,7 +82,7 @@ jobs:
           no-rdrand,
           no-rfc3779,
           no-scrypt,
-          no-sctp,
+          enable-sctp,
           no-secure-memory,
           no-shared,
           no-siphash,
@@ -124,6 +124,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Install Dependencies for sctp option
+      run:  |
+        sudo apt-get update
+        sudo apt-get -yq install lksctp-tools libsctp-dev
+        sudo sysctl -w net.sctp.auth_enable=1
+      if: matrix.opt == 'enable-sctp'
     - name: config
       run: CC=clang ./config --banner=Configured --strict-warnings ${{ matrix.opt }}
     - name: config dump
