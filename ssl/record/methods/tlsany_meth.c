@@ -188,14 +188,14 @@ struct record_functions_st dtls_any_funcs = {
     dtls_get_more_records,
     NULL,
     NULL,
+    NULL,
     dtls_write_records,
     tls_allocate_write_buffers_default,
     tls_initialise_write_packets_default,
     NULL,
+    dtls_prepare_record_header,
     NULL,
-    NULL,
-    NULL,
-    NULL,
-    NULL,
+    tls_prepare_for_encryption_default,
+    tls_post_encryption_processing_default,
     NULL
 };

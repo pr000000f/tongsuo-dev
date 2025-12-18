@@ -646,8 +646,6 @@ struct record_functions_st dtls_1_funcs = {
     NULL,
     NULL,
     NULL,
-    NULL,
-    NULL,
     dtls_write_records,
     /*
      * Don't use tls1_allocate_write_buffers since that handles empty fragment
@@ -658,6 +656,9 @@ struct record_functions_st dtls_1_funcs = {
     /* Don't use tls1_initialise_write_packets for same reason as above */
     tls_initialise_write_packets_default,
     NULL,
+    dtls_prepare_record_header,
     NULL,
+    tls_prepare_for_encryption_default,
+    tls_post_encryption_processing_default,
     NULL
 };
