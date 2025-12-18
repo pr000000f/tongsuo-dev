@@ -528,6 +528,8 @@ my @disablables = (
     "weak-ssl-ciphers",
     "zlib",
     "zlib-dynamic",
+    "zstd",
+    "zstd-dynamic",
     "skip-scsv",
     "session-lookup",
     "dynamic-ciphers",
@@ -608,6 +610,8 @@ our %disabled = ( # "what"         => "comment"
                   "weak-ssl-ciphers"    => "default",
                   "zlib"                => "default",
                   "zlib-dynamic"        => "default",
+                  "zstd"                => "default",
+                  "zstd-dynamic"        => "default",
                   "ec_elgamal"          => "default",
                   "twisted_ec_elgamal"  => "default",
                   "optimize-chacha-choose"     => "default",
@@ -673,6 +677,7 @@ my @disable_cascades = (
     "ssl3-method"       => [ "ssl3" ],
     "zlib"              => [ "zlib-dynamic" ],
     "brotli"            => [ "brotli-dynamic" ],
+    "zstd"              => [ "zstd-dynamic" ],
     "ec"                => [ "ec2m", "ecdsa", "ecdh", "sm2", "sm2dh-mlkem768-hybrid"],
     "sm2"               => [ "sm2_threshold", "sm2dh-mlkem768-hybrid"],
     "ec_elgamal"        => [ "twisted_ec_elgamal" ],
@@ -719,7 +724,7 @@ my @disable_cascades = (
     "stdio"             => [ "apps", "capieng", "egd" ],
     "apps"              => [ "tests" ],
     "tests"             => [ "external-tests" ],
-    "comp"              => [ "zlib", "brotli" ],
+    "comp"              => [ "zlib", "brotli", "zstd" ],
     "sm3"               => [ "sm2" ],
     "sm4"               => [ "wbsm4-xiaolai", "wbsm4-baiwu", "wbsm4-wsise" ],
     sub { !$disabled{"unit-test"} } => [ "heartbeats" ],
@@ -980,6 +985,10 @@ while (@argvcopy)
                         {
                         delete $disabled{"brotli"};
                         }
+                elsif ($1 eq "zstd-dynamic")
+                        {
+                        delete $disabled{"zstd"};
+                        }
                 elsif ($1 eq "sdf-lib-dynamic")
                         {
                         delete $disabled{"sdf-lib"};
@@ -1071,6 +1080,14 @@ while (@argvcopy)
                 elsif (/^--with-brotli-include=(.*)$/)
                         {
                         $withargs{brotli_include}=$1;
+                        }
+                elsif (/^--with-zstd-lib=(.*)$/)
+                        {
+                        $withargs{zstd_lib}=$1;
+                        }
+                elsif (/^--with-zstd-include=(.*)$/)
+                        {
+                        $withargs{zstd_include}=$1;
                         }
                 elsif (/^--with-fuzzer-lib=(.*)$/)
                         {

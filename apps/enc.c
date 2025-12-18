@@ -149,6 +149,8 @@ int enc_main(int argc, char **argv)
 #endif
     int do_brotli = 0;
     BIO *bbrot = NULL;
+    int do_zstd = 0;
+    BIO *bzstd = NULL;
 
     /* first check the command name */
     if (strcmp(argv[0], "base64") == 0)
@@ -160,6 +162,10 @@ int enc_main(int argc, char **argv)
 #ifndef OPENSSL_NO_BROTLI
     else if (strcmp(argv[0], "brotli") == 0)
         do_brotli = 1;
+#endif
+#ifndef OPENSSL_NO_ZSTD
+    else if (strcmp(argv[0], "zstd") == 0)
+        do_zstd = 1;
 #endif
     else if (strcmp(argv[0], "enc") != 0)
         ciphername = argv[0];
@@ -356,6 +362,8 @@ int enc_main(int argc, char **argv)
 #endif
     if (do_brotli)
         base64 = 0;
+    if (do_zstd)
+        base64 = 0;
 
     if (base64) {
         if (enc)
@@ -470,6 +478,19 @@ int enc_main(int argc, char **argv)
             wbio = BIO_push(bbrot, wbio);
         else
             rbio = BIO_push(bbrot, rbio);
+    }
+
+    if (do_zstd) {
+        if ((bzstd = BIO_new(BIO_f_zstd())) == NULL)
+            goto end;
+        if (debug) {
+            BIO_set_callback_ex(bzstd, BIO_debug_callback_ex);
+            BIO_set_callback_arg(bzstd, (char *)bio_err);
+        }
+        if (enc)
+            wbio = BIO_push(bzstd, wbio);
+        else
+            rbio = BIO_push(bzstd, rbio);
     }
 #endif
 
@@ -745,6 +766,7 @@ int enc_main(int argc, char **argv)
     OPENSSL_free(rawkey);
 #endif
     BIO_free(bbrot);
+    BIO_free(bzstd);
     release_engine(e);
     OPENSSL_free(pass);
     return ret;
