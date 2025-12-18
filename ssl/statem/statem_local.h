@@ -65,7 +65,7 @@ typedef enum {
     MSG_PROCESS_CONTINUE_READING
 } MSG_PROCESS_RETURN;
 
-typedef int (*confunc_f) (SSL_CONNECTION *s, WPACKET *pkt);
+typedef CON_FUNC_RETURN (*confunc_f) (SSL_CONNECTION *s, WPACKET *pkt);
 typedef MSG_PROCESS_RETURN (*profunc_f) (SSL_CONNECTION *s, PACKET *pkt);
 
 int ssl3_take_mac(SSL_CONNECTION *s);

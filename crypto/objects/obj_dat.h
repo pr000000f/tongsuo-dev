@@ -10,7 +10,7 @@
  */
 
 /* Serialized OID's */
-static const unsigned char so[6871] = {
+static const unsigned char so[6882] = {
     0x2A,0x86,0x48,0x86,0xF7,0x0D,                 /* [    0] OBJ_rsadsi */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,            /* [    6] OBJ_pkcs */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x02,0x05,       /* [   13] OBJ_md5 */
@@ -965,9 +965,10 @@ static const unsigned char so[6871] = {
     0x04,0x00,0x81,0x95,0x32,0x01,0x04,            /* [ 6849] OBJ_id_aa_ATSHashIndex_v2 */
     0x04,0x00,0x81,0x95,0x32,0x01,0x05,            /* [ 6856] OBJ_id_aa_ATSHashIndex_v3 */
     0x04,0x00,0x81,0x95,0x32,0x01,0x06,            /* [ 6863] OBJ_signedAssertion */
+    0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x09,0x10,0x01,0x32,  /* [ 6870] OBJ_id_ct_signedTAL */
 };
 
-#define NUM_NID 1351
+#define NUM_NID 1357
 static const ASN1_OBJECT nid_objs[NUM_NID] = {
     {"UNDEF", "undefined", NID_undef},
     {"rsadsi", "RSA Data Security, Inc.", NID_rsadsi, 6, &so[0]},
@@ -2320,9 +2321,15 @@ static const ASN1_OBJECT nid_objs[NUM_NID] = {
     {"id-aa-ATSHashIndex-v2", "id-aa-ATSHashIndex-v2", NID_id_aa_ATSHashIndex_v2, 7, &so[6849]},
     {"id-aa-ATSHashIndex-v3", "id-aa-ATSHashIndex-v3", NID_id_aa_ATSHashIndex_v3, 7, &so[6856]},
     {"signedAssertion", "signedAssertion", NID_signedAssertion, 7, &so[6863]},
+    {"id-ct-signedTAL", "id-ct-signedTAL", NID_id_ct_signedTAL, 11, &so[6870]},
+    {"brainpoolP256r1tls13", "brainpoolP256r1tls13", NID_brainpoolP256r1tls13},
+    {"brainpoolP384r1tls13", "brainpoolP384r1tls13", NID_brainpoolP384r1tls13},
+    {"brainpoolP512r1tls13", "brainpoolP512r1tls13", NID_brainpoolP512r1tls13},
+    {"brotli", "Brotli compression", NID_brotli},
+    {"zstd", "Zstandard compression", NID_zstd},
 };
 
-#define NUM_SN 1065
+#define NUM_SN 1071
 static const unsigned int sn_objs[NUM_SN] = {
      364,    /* "AD_DVCS" */
      419,    /* "AES-128-CBC" */
@@ -2583,17 +2590,17 @@ static const unsigned int sn_objs[NUM_SN] = {
      925,    /* "brainpoolP224r1" */
      926,    /* "brainpoolP224t1" */
      927,    /* "brainpoolP256r1" */
-    1285,    /* "brainpoolP256r1tls13" */
+    1352,    /* "brainpoolP256r1tls13" */
      928,    /* "brainpoolP256t1" */
      929,    /* "brainpoolP320r1" */
      930,    /* "brainpoolP320t1" */
      931,    /* "brainpoolP384r1" */
-    1286,    /* "brainpoolP384r1tls13" */
+    1353,    /* "brainpoolP384r1tls13" */
      932,    /* "brainpoolP384t1" */
      933,    /* "brainpoolP512r1" */
-    1287,    /* "brainpoolP512r1tls13" */
+    1354,    /* "brainpoolP512r1tls13" */
      934,    /* "brainpoolP512t1" */
-    1288,    /* "brotli" */
+    1355,    /* "brotli" */
      494,    /* "buildingName" */
      860,    /* "businessCategory" */
      691,    /* "c2onb191v4" */
@@ -2819,6 +2826,7 @@ static const unsigned int sn_objs[NUM_SN] = {
     1236,    /* "id-ct-rpkiGhostbusters" */
     1235,    /* "id-ct-rpkiManifest" */
     1247,    /* "id-ct-signedChecklist" */
+    1351,    /* "id-ct-signedTAL" */
     1060,    /* "id-ct-xml" */
     1108,    /* "id-dsa-with-sha3-224" */
     1109,    /* "id-dsa-with-sha3-256" */
@@ -3393,9 +3401,10 @@ static const unsigned int sn_objs[NUM_SN] = {
      158,    /* "x509Certificate" */
      160,    /* "x509Crl" */
     1093,    /* "x509ExtAdmission" */
+    1356,    /* "zstd" */
 };
 
-#define NUM_LN 1065
+#define NUM_LN 1071
 static const unsigned int ln_objs[NUM_LN] = {
      363,    /* "AD Time Stamping" */
      405,    /* "ANSI X9.62" */
@@ -3407,7 +3416,7 @@ static const unsigned int ln_objs[NUM_LN] = {
      365,    /* "Basic OCSP Response" */
      285,    /* "Biometric Info" */
     1221,    /* "Brand Indicator for Message Identification" */
-    1288,    /* "Brotli compression" */
+    1355,    /* "Brotli compression" */
      179,    /* "CA Issuers" */
      785,    /* "CA Repository" */
     1219,    /* "CMC Archive Server" */
@@ -3575,7 +3584,7 @@ static const unsigned int ln_objs[NUM_LN] = {
      184,    /* "X9.57" */
      185,    /* "X9.57 CM ?" */
     1209,    /* "XmppAddr" */
-    1289,    /* "Zstandard compression" */
+    1356,    /* "Zstandard compression" */
      478,    /* "aRecord" */
      289,    /* "aaControls" */
      287,    /* "ac-auditEntity" */
@@ -3645,15 +3654,15 @@ static const unsigned int ln_objs[NUM_LN] = {
      925,    /* "brainpoolP224r1" */
      926,    /* "brainpoolP224t1" */
      927,    /* "brainpoolP256r1" */
-    1285,    /* "brainpoolP256r1tls13" */
+    1352,    /* "brainpoolP256r1tls13" */
      928,    /* "brainpoolP256t1" */
      929,    /* "brainpoolP320r1" */
      930,    /* "brainpoolP320t1" */
      931,    /* "brainpoolP384r1" */
-    1286,    /* "brainpoolP384r1tls13" */
+    1353,    /* "brainpoolP384r1tls13" */
      932,    /* "brainpoolP384t1" */
      933,    /* "brainpoolP512r1" */
-    1287,    /* "brainpoolP512r1tls13" */
+    1354,    /* "brainpoolP512r1tls13" */
      934,    /* "brainpoolP512t1" */
      494,    /* "buildingName" */
      860,    /* "businessCategory" */
@@ -3897,6 +3906,7 @@ static const unsigned int ln_objs[NUM_LN] = {
     1236,    /* "id-ct-rpkiGhostbusters" */
     1235,    /* "id-ct-rpkiManifest" */
     1247,    /* "id-ct-signedChecklist" */
+    1351,    /* "id-ct-signedTAL" */
     1060,    /* "id-ct-xml" */
      408,    /* "id-ecPublicKey" */
      508,    /* "id-hex-multipart-message" */
@@ -4469,7 +4479,7 @@ static const unsigned int ln_objs[NUM_LN] = {
     1255,    /* "zuc-128-eia3" */
 };
 
-#define NUM_OBJ 960
+#define NUM_OBJ 961
 static const unsigned int obj_objs[NUM_OBJ] = {
        0,    /* OBJ_undef                        0 */
      181,    /* OBJ_iso                          1 */
@@ -5362,6 +5372,7 @@ static const unsigned int obj_objs[NUM_OBJ] = {
     1246,    /* OBJ_id_ct_geofeedCSVwithCRLF     1 2 840 113549 1 9 16 1 47 */
     1247,    /* OBJ_id_ct_signedChecklist        1 2 840 113549 1 9 16 1 48 */
     1320,    /* OBJ_id_ct_ASPA                   1 2 840 113549 1 9 16 1 49 */
+    1351,    /* OBJ_id_ct_signedTAL              1 2 840 113549 1 9 16 1 50 */
      212,    /* OBJ_id_smime_aa_receiptRequest   1 2 840 113549 1 9 16 2 1 */
      213,    /* OBJ_id_smime_aa_securityLabel    1 2 840 113549 1 9 16 2 2 */
      214,    /* OBJ_id_smime_aa_mlExpandHistory  1 2 840 113549 1 9 16 2 3 */

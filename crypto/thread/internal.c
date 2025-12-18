@@ -11,8 +11,11 @@
 #include <openssl/e_os2.h>
 #include <openssl/types.h>
 #include <openssl/crypto.h>
-#include <internal/thread.h>
-#include <internal/thread_arch.h>
+
+#if !defined(OPENSSL_NO_DEFAULT_THREAD_POOL)
+    #include <internal/thread.h>
+    #include <internal/thread_arch.h>
+#endif
 
 #if !defined(OPENSSL_NO_DEFAULT_THREAD_POOL)
 
@@ -100,7 +103,7 @@ int ossl_crypto_thread_clean(void *vhandle)
 }
 
 #else
-
+/*
 ossl_inline uint64_t ossl_get_avail_threads(OSSL_LIB_CTX *ctx)
 {
     return 0;
@@ -121,11 +124,13 @@ int ossl_crypto_thread_clean(void *vhandle)
 {
     return 0;
 }
+*/
 
 #endif
 
 #if defined(OPENSSL_THREADS)
 
+/*
 void *ossl_threads_ctx_new(OSSL_LIB_CTX *ctx)
 {
     struct openssl_threads_st *t = OPENSSL_zalloc(sizeof(*t));
@@ -157,5 +162,6 @@ void ossl_threads_ctx_free(void *vdata)
     ossl_crypto_condvar_free(&t->cond_finished);
     OPENSSL_free(t);
 }
+*/
 
 #endif

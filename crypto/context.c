@@ -101,12 +101,19 @@ static int context_init(OSSL_LIB_CTX *ctx)
                                     &ctx->data))
         goto err;
 
-#if defined(OPENSSL_THREADS)
-    ctx->threads = ossl_threads_ctx_new(ctx);
-    if (ctx->threads == NULL)
-        goto err;
-#endif
-
+    /*
+     * Currently we do not follow OpenSSL commit 
+     * fdb11e1bcb38e33d5804f25dba176a901a19688a for thread pool
+     * in context.c since preprocessing modification
+     * is required.
+     * 
+     * #if defined(OPENSSL_THREADS)
+     *  ctx->threads = ossl_threads_ctx_new(ctx);
+     *  if (ctx->threads == NULL)
+     *      goto err;
+     * #endif
+     */
+    
     /* Everything depends on properties, so we also pre-initialise that */
     if (!ossl_property_parse_init(ctx))
         goto err;
@@ -428,10 +435,17 @@ void *ossl_lib_ctx_get_data(OSSL_LIB_CTX *ctx, int index,
         CRYPTO_THREAD_unlock(ctx->lock);
     }
 
-#if defined(OPENSSL_THREADS)
-    case OSSL_LIB_CTX_THREAD_INDEX:
-        return ctx->threads;
-#endif
+    /*
+     * Currently we do not follow OpenSSL commit 
+     * fdb11e1bcb38e33d5804f25dba176a901a19688a for thread pool
+     * in context.c since preprocessing modification
+     * is required.
+     * 
+     * #if defined(OPENSSL_THREADS)
+     * case OSSL_LIB_CTX_THREAD_INDEX:
+     *    return ctx->threads;
+     * #endif
+     */
 
 end:
     CRYPTO_THREAD_unlock(ctx->index_locks[index]);

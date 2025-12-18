@@ -1083,3 +1083,9 @@ id_aa_ets_sigPolicyStore		1347
 id_aa_ATSHashIndex_v2		1348
 id_aa_ATSHashIndex_v3		1349
 signedAssertion		1350
+id_ct_signedTAL		1351
+brainpoolP256r1tls13		1352
+brainpoolP384r1tls13		1353
+brainpoolP512r1tls13		1354
+brotli		1355
+zstd		1356
