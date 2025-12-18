@@ -42,6 +42,10 @@ struct ossl_lib_ctx_st {
     int run_once_ret[OSSL_LIB_CTX_MAX_RUN_ONCE];
     struct ossl_lib_ctx_onfree_list_st *onfreelist;
     unsigned int ischild:1;
+
+#if defined(OPENSSL_THREADS)
+    void *threads;
+#endif
 };
 
 int ossl_lib_ctx_write_lock(OSSL_LIB_CTX *ctx)
@@ -96,6 +100,12 @@ static int context_init(OSSL_LIB_CTX *ctx)
     if (!ossl_crypto_new_ex_data_ex(ctx, CRYPTO_EX_INDEX_OSSL_LIB_CTX, NULL,
                                     &ctx->data))
         goto err;
+
+#if defined(OPENSSL_THREADS)
+    ctx->threads = ossl_threads_ctx_new(ctx);
+    if (ctx->threads == NULL)
+        goto err;
+#endif
 
     /* Everything depends on properties, so we also pre-initialise that */
     if (!ossl_property_parse_init(ctx))
@@ -417,6 +427,11 @@ void *ossl_lib_ctx_get_data(OSSL_LIB_CTX *ctx, int index,
         data = CRYPTO_get_ex_data(&ctx->data, ctx->dyn_indexes[index]);
         CRYPTO_THREAD_unlock(ctx->lock);
     }
+
+#if defined(OPENSSL_THREADS)
+    case OSSL_LIB_CTX_THREAD_INDEX:
+        return ctx->threads;
+#endif
 
 end:
     CRYPTO_THREAD_unlock(ctx->index_locks[index]);
