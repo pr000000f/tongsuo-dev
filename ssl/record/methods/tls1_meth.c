@@ -655,6 +655,6 @@ struct record_functions_st dtls_1_funcs = {
     dtls_prepare_record_header,
     NULL,
     tls_prepare_for_encryption_default,
-    tls_post_encryption_processing_default,
+    dtls_post_encryption_processing,
     NULL
 };
