@@ -1400,11 +1400,6 @@ void ossl_ssl_connection_free(SSL *ssl)
 
     RECORD_LAYER_clear(&s->rlayer);
 
-    BIO_free_all(s->wbio);
-    s->wbio = NULL;
-    BIO_free_all(s->rbio);
-    s->rbio = NULL;
-
     BUF_MEM_free(s->init_buf);
 
     /* add extra stuff */
@@ -1488,6 +1483,17 @@ void ossl_ssl_connection_free(SSL *ssl)
 #ifndef OPENSSL_NO_CERT_COMPRESSION
     sk_CERT_COMP_pop_free(s->cert_comp_algs, CERT_COMP_free);
 #endif
+
+    /*
+     * We do this late. We want to ensure that any other references we held to
+     * these BIOs are freed first *before* we call BIO_free_all(), because
+     * BIO_free_all() will only free each BIO in the chain if the number of
+     * references to the first BIO have dropped to 0
+     */
+    BIO_free_all(s->wbio);
+    s->wbio = NULL;
+    BIO_free_all(s->rbio);
+    s->rbio = NULL;
 }
 
 void SSL_set0_rbio(SSL *s, BIO *rbio)
