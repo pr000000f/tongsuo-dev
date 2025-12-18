@@ -1379,7 +1379,7 @@ static void list_disabled(void)
 #ifdef OPENSSL_NO_TLS1_2
     BIO_puts(bio_out, "TLS1_2\n");
 #endif
-#ifndef ZLIB
+#ifdef OPENSSL_NO_ZLIB
     BIO_puts(bio_out, "ZLIB\n");
 #endif
 #ifdef OPENSSL_NO_BROTLI
