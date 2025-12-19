@@ -49,6 +49,11 @@ struct ossl_lib_ctx_st {
     void *fips_prov;
 #endif
 
+#ifdef SMTC_MODULE
+    void *smtc_crngt;
+    void *smtc_prov;
+#endif
+
     CRYPTO_RWLOCK *oncelock;
     int run_once_done[OSSL_LIB_CTX_MAX_RUN_ONCE];
     int run_once_ret[OSSL_LIB_CTX_MAX_RUN_ONCE];
@@ -189,6 +194,15 @@ static int context_init(OSSL_LIB_CTX *ctx)
         goto err;
 #endif
 
+#ifdef SMTC_MODULE
+    ctx->smtc_crngt = rand_smtc_crng_ossl_ctx_new(ctx);
+    if(ctx->smtc_crngt == NULL)
+        goto err;
+    ctx->smtc_prov = smtc_prov_ossl_ctx_new(ctx);
+    if(ctx->smtc_prov == NULL)
+        goto err;
+#endif
+
 #if defined(OPENSSL_THREADS)
     ctx->threads = ossl_threads_ctx_new(ctx);
     if (ctx->threads == NULL)
@@ -201,19 +215,6 @@ static int context_init(OSSL_LIB_CTX *ctx)
     if (ctx->child_provider == NULL)
         goto err;
 #endif
-
-    /*
-     * Currently we do not follow OpenSSL commit 
-     * fdb11e1bcb38e33d5804f25dba176a901a19688a for thread pool
-     * in context.c since preprocessing modification
-     * is required.
-     * 
-     * #if defined(OPENSSL_THREADS)
-     *  ctx->threads = ossl_threads_ctx_new(ctx);
-     *  if (ctx->threads == NULL)
-     *      goto err;
-     * #endif
-     */
     
     /* Everything depends on properties, so we also pre-initialise that */
     if (!ossl_property_parse_init(ctx))
@@ -334,6 +335,17 @@ static void context_deinit_objs(OSSL_LIB_CTX *ctx)
     if (ctx->fips_prov != NULL) {
         ossl_fips_prov_ossl_ctx_free(ctx->fips_prov);
         ctx->fips_prov = NULL;
+    }
+#endif
+
+#ifdef SMTC_MODULE
+    if(ctx->smtc_crngt != NULL) {
+        rand_smtc_crng_ossl_ctx_free(ctx->smtc_crngt);
+        ctx->smtc_crngt = NULL;
+    }
+    if(ctx->smtc_prov != NULL) {
+        smtc_prov_ossl_ctx_free(ctx->smtc_prov);
+        ctx->smtc_prov = NULL;
     }
 #endif
 
@@ -624,6 +636,12 @@ void *ossl_lib_ctx_get_data(OSSL_LIB_CTX *ctx, int index)
     
     case OSSL_LIB_CTX_FIPS_PROV_INDEX:
         return ctx->fips_prov;
+#endif
+#ifdef SMTC_MODULE
+    case OSSL_LIB_CTX_RAND_SMTC_CRNGT_INDEX:
+        return ctx->smtc_crngt;
+    case OSSL_LIB_CTX_SMTC_PROV_INDEX:
+        return ctx->smtc_prov;
 #endif
 
     default:

@@ -23,7 +23,7 @@
 #include "drbg_local.h"
 #include "prov/seeding.h"
 #include "crypto/evp.h"
-
+#include "crypto/context.h"
 
 typedef struct smtc_crng_test_global_st {
     CRYPTO_RWLOCK *lock;
@@ -82,7 +82,7 @@ static int sm3_df(EVP_MD_CTX *ctx, unsigned char *out, size_t outlen,
     return 1;
 }
 
-static void rand_smtc_crng_ossl_ctx_free(void *vcrngt_glob)
+void rand_smtc_crng_ossl_ctx_free(void *vcrngt_glob)
 {
     SMTC_CRNG_TEST_GLOBAL *smtc_glob = vcrngt_glob;
 
@@ -91,7 +91,7 @@ static void rand_smtc_crng_ossl_ctx_free(void *vcrngt_glob)
     OPENSSL_free(smtc_glob);
 }
 
-static void *rand_smtc_crng_ossl_ctx_new(OSSL_LIB_CTX *ctx)
+void *rand_smtc_crng_ossl_ctx_new(OSSL_LIB_CTX *ctx)
 {
     SMTC_CRNG_TEST_GLOBAL *smtc_glob = OPENSSL_zalloc(sizeof(*smtc_glob));
 
@@ -113,12 +113,6 @@ static void *rand_smtc_crng_ossl_ctx_new(OSSL_LIB_CTX *ctx)
 
     return smtc_glob;
 }
-
-static const OSSL_LIB_CTX_METHOD rand_smtc_ossl_ctx_method = {
-    OSSL_LIB_CTX_METHOD_DEFAULT_PRIORITY,
-    rand_smtc_crng_ossl_ctx_new,
-    rand_smtc_crng_ossl_ctx_free,
-};
 
 /* 1 + ceil(20/H) */
 #define REPEAT_COUNT_TEST_THRESHOLD 4
@@ -163,7 +157,7 @@ size_t ossl_smtc_get_entropy(PROV_DRBG *drbg, unsigned char **pout, int entropy,
 
     OSSL_LIB_CTX *libctx = ossl_prov_ctx_get0_libctx(drbg->provctx);
     SMTC_CRNG_TEST_GLOBAL *crngt_glob = ossl_lib_ctx_get_data(
-        libctx, OSSL_LIB_CTX_RAND_SMTC_CRNGT_INDEX, &rand_smtc_ossl_ctx_method);
+        libctx, OSSL_LIB_CTX_RAND_SMTC_CRNGT_INDEX);
 
     if (crngt_glob == NULL)
         return 0;

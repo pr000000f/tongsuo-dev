@@ -23,6 +23,8 @@ void *ossl_self_test_set_callback_new(OSSL_LIB_CTX *);
 void *ossl_rand_crng_ctx_new(OSSL_LIB_CTX *);
 void *ossl_thread_event_ctx_new(OSSL_LIB_CTX *);
 void *ossl_fips_prov_ossl_ctx_new(OSSL_LIB_CTX *);
+void *smtc_prov_ossl_ctx_new(OSSL_LIB_CTX *);
+void *rand_smtc_crng_ossl_ctx_new(OSSL_LIB_CTX *);
 #if defined(OPENSSL_THREADS)
 void *ossl_threads_ctx_new(OSSL_LIB_CTX *);
 #endif
@@ -41,6 +43,8 @@ void ossl_self_test_set_callback_free(void *);
 void ossl_rand_crng_ctx_free(void *);
 void ossl_thread_event_ctx_free(void *);
 void ossl_fips_prov_ossl_ctx_free(void *);
+void smtc_prov_ossl_ctx_free(void *);
+void rand_smtc_crng_ossl_ctx_free(void *);
 #if defined(OPENSSL_THREADS)
 void ossl_threads_ctx_free(void *);
 #endif

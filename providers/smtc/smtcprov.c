@@ -29,6 +29,7 @@
 #include "internal/core.h"
 #include "internal/smtc_names.h"
 #include "internal/thread_once.h"
+#include "crypto/context.h"
 
 
 /* From GM/T 0105-2021 (Sec 6) */
@@ -64,7 +65,7 @@ typedef struct smtc_global_st {
     SELF_TEST_POST_PARAMS selftest_params;
 } SMTC_GLOBAL;
 
-static void *smtc_prov_ossl_ctx_new(OSSL_LIB_CTX *libctx)
+void *smtc_prov_ossl_ctx_new(OSSL_LIB_CTX *libctx)
 {
     SMTC_GLOBAL *fgbl = OPENSSL_zalloc(sizeof(*fgbl));
 
@@ -74,17 +75,10 @@ static void *smtc_prov_ossl_ctx_new(OSSL_LIB_CTX *libctx)
     return fgbl;
 }
 
-static void smtc_prov_ossl_ctx_free(void *fgbl)
+void smtc_prov_ossl_ctx_free(void *fgbl)
 {
     OPENSSL_free(fgbl);
 }
-
-static const OSSL_LIB_CTX_METHOD smtc_prov_ossl_ctx_method = {
-    OSSL_LIB_CTX_METHOD_DEFAULT_PRIORITY,
-    smtc_prov_ossl_ctx_new,
-    smtc_prov_ossl_ctx_free,
-};
-
 
 /* Parameters we provide to the core */
 static const OSSL_PARAM smtc_param_types[] = {
@@ -251,8 +245,7 @@ static int smtc_self_test(void *provctx)
 {
     SMTC_GLOBAL *fgbl =
                     ossl_lib_ctx_get_data(ossl_prov_ctx_get0_libctx(provctx),
-                                          OSSL_LIB_CTX_SMTC_PROV_INDEX,
-                                          &smtc_prov_ossl_ctx_method);
+                                          OSSL_LIB_CTX_SMTC_PROV_INDEX);
 
     set_self_test_cb(fgbl);
     return SELF_TEST_post(&fgbl->selftest_params, 1) ? 1 : 0;
@@ -660,8 +653,7 @@ int OSSL_provider_init_int(const OSSL_CORE_HANDLE *handle,
     if ((corebiometh = ossl_bio_prov_init_bio_method()) == NULL)
         goto err;
 
-    if ((fgbl = ossl_lib_ctx_get_data(libctx, OSSL_LIB_CTX_SMTC_PROV_INDEX,
-                                      &smtc_prov_ossl_ctx_method)) == NULL)
+    if ((fgbl = ossl_lib_ctx_get_data(libctx, OSSL_LIB_CTX_SMTC_PROV_INDEX)) == NULL)
         goto err;
 
     fgbl->handle = handle;
