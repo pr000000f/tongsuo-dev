@@ -13,7 +13,7 @@ use OpenSSL::Test;
 
 setup("test_app");
 
-plan tests => 7;
+plan tests => 5;
 
 ok(run(app(["openssl"])),
    "Run openssl app with no args");

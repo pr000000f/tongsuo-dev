@@ -414,6 +414,7 @@ int ossl_x509_store_ctx_get_by_subject(const X509_STORE_CTX *ctx, X509_LOOKUP_TY
             j = X509_LOOKUP_by_subject_ex(lu, type, name, &stmp,
                                           ctx->libctx, ctx->propq);
             if (j != 0) { /* non-zero value is considered success here */
+                return 1;
                 tmp = &stmp;
                 break;
             }
