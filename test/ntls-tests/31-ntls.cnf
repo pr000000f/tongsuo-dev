@@ -1,6 +1,6 @@
 # Generated with generate_ssl_tests.pl
 
-num_tests = 18
+num_tests = 19
 
 test-0 = 0-test server set min and max TLS version should not affect NTLS
 test-1 = 1-test cipher ECC-SM2-SM4-CBC-SM3 in NTLS_UNIQUE mode, NTLS_UNIQUE test server and client all use NTLS only
@@ -20,6 +20,7 @@ test-14 = 14-test server choose RSA-SM4 with RSA double certs only
 test-15 = 15-test server choose the preferred cipher ECC-SM2 with SM2 and RSA double certs
 test-16 = 16-test server choose the preferred cipher RSA-SM4 with SM2 and RSA double certs
 test-17 = 17-test server choose the client preferred cipher RSA-SM4 with SM2 and RSA double certs
+test-18 = 18-test server swapped sign and enc certificates
 # ===========================================================
 
 [0-test server set min and max TLS version should not affect NTLS]
@@ -611,5 +612,40 @@ ExpectedCipher = ECC-SM2-SM4-CBC-SM3
 ExpectedProtocol = NTLS
 ExpectedResult = Success
 Method = NTLS
+
+
+# ===========================================================
+
+[18-test server swapped sign and enc certificates]
+ssl_conf = 18-test server swapped sign and enc certificates-ssl
+
+[18-test server swapped sign and enc certificates-ssl]
+server = 18-test server swapped sign and enc certificates-server
+client = 18-test server swapped sign and enc certificates-client
+
+[18-test server swapped sign and enc certificates-server]
+Certificate = ${ENV::TEST_CERTS_DIR}/servercert.pem
+CipherString = DEFAULT
+Enable_ntls = on
+EncCertificate = ${ENV::TEST_CERTS_DIR}/sm2/server_enc.crt
+EncPrivateKey = ${ENV::TEST_CERTS_DIR}/sm2/server_enc.key
+PrivateKey = ${ENV::TEST_CERTS_DIR}/serverkey.pem
+SignCertificate = ${ENV::TEST_CERTS_DIR}/sm2/server_sign.crt
+SignPrivateKey = ${ENV::TEST_CERTS_DIR}/sm2/server_sign.key
+
+[18-test server swapped sign and enc certificates-client]
+CipherString = ECC-SM2-SM4-CBC-SM3
+Enable_ntls = on
+VerifyCAFile = ${ENV::TEST_CERTS_DIR}/sm2/chain-ca.crt
+VerifyMode = Peer
+
+[test-18]
+ExpectedClientAlert = IllegalParameter
+ExpectedResult = ClientFail
+Method = NTLS
+server = 18-test server swapped sign and enc certificates-server-extra
+
+[18-test server swapped sign and enc certificates-server-extra]
+SwapNTLSSignEncCerts = Yes
 
 

@@ -1855,3 +1855,27 @@ int SSL_connection_is_ntls(SSL_CONNECTION *s, int is_server)
 
     return 0;
 }
+
+int ntls_check_cert_key_usage(SSL_CONNECTION *s, X509 *x, int is_sign)
+{
+    uint32_t ku;
+
+    if (s == NULL || x == NULL)
+        return 0;
+
+    if (!s->enable_ntls_cert_key_usage_check)
+        return 1;
+
+    /*
+     * GB/T 20518-2018 requires a critical keyUsage extension. 
+     * But we do not apply this requirement strictly as all testing certificates (as well as other NTLS implementations) use non-critical keyUsage extension, and just check the value of keyUsage.
+     * Appendix C.3 (sign): digitalSignature | nonRepudiation.
+     * Appendix C.4 (enc):  keyEncipherment | dataEncipherment | keyAgreement.
+     * Exact match: extra or missing bits fail.
+     */
+    ku = X509_get_key_usage(x);
+    if (ku != (is_sign ? NTLS_SIG_CERT_KU_FLAG : NTLS_ENC_CERT_KU_FLAG))
+        return 0;
+
+    return 1;
+}
