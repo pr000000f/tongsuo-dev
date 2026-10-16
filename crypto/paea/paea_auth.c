@@ -48,15 +48,6 @@
 
 #include "paea_local.h"
 
-/* out = copy of a with the sign flipped */
-static int paea_neg_dup(const BIGNUM *a, BIGNUM *out)
-{
-    if (BN_copy(out, a) == NULL)
-        return 0;
-    BN_set_negative(out, 1);
-    return 1;
-}
-
 /*
  * Fiat-Shamir challenge: c = BS2IP(H_lamda(...)).  The exact hash input
  * order follows the standard text; M and N are only hashed in the
@@ -399,7 +390,7 @@ int paea_zyhw_user_prove(EVP_PAEA_CTX *ctx, const unsigned char *pw,
         goto err;
     if (!paea_rand_in_zq_star(ctx, r_m)
             || !paea_rand_in_zq_star(ctx, r_a)
-            || !paea_neg_dup(r_m, neg_r_m)
+            || BN_sub(neg_r_m, ctx->q, r_m) != 1   /* -r_m as q - r_m */
             || !paea_muls(ctx, r_pt, r_a, 1,
                           (const EC_POINT *[]){ t_pt },
                           (const BIGNUM *[]){ neg_r_m })) /* R = r_a*g - r_m*T */
@@ -600,7 +591,10 @@ int paea_zyhw_server_verify(EVP_PAEA_CTX *ctx, const unsigned char *msg2,
             && EC_POINT_is_at_infinity(ctx->group, m_pt) == 1)
         goto err;                    /* M != 1 */
 
-    if (!paea_neg_dup(c, neg_c) || !paea_neg_dup(s_m, neg_sm))
+    /* additive inverses mod q; BN_sub may go negative when c >= q, the
+     * scalars are reduced mod q inside paea_muls() anyway */
+    if (BN_sub(neg_c, ctx->q, c) != 1
+            || BN_sub(neg_sm, ctx->q, s_m) != 1)
         goto err;
     /* V = r*T, then R' = s_a*g - s_m*T - c*V */
     if (!paea_scalar_mul(ctx, ctx->r, t_pt, v_pt))
