@@ -62,81 +62,87 @@ static int paea_zyhw_challenge(EVP_PAEA_CTX *ctx,
                                const unsigned char *sig, size_t sig_len,
                                BIGNUM *c)
 {
-    EVP_MD_CTX *mctx = NULL;
+    int rc = 0;
+    EVP_MD_CTX *hash = NULL;
     unsigned char md[EVP_MAX_MD_SIZE];
-    unsigned char *oct = NULL;
-    size_t octlen;
+    unsigned char *buf = NULL;
+    size_t buf_len;
     unsigned int mdlen = 0;
-    int ret = 0;
 
-    /* m_pt and n_pt are optional: they are only hashed in the
-     * revocation enabled variant of the mechanism. */
-    if (ctx == NULL || t_pt == NULL || r_pt == NULL || x_pt == NULL
-            || y_pt == NULL || sig == NULL || c == NULL) {
-        ERR_raise(ERR_LIB_PAEA, ERR_R_PASSED_NULL_PARAMETER);
-        return 0;
+    hash = EVP_MD_CTX_new();
+    if (hash == NULL) {
+        ERR_raise(ERR_LIB_PAEA, ERR_R_EVP_LIB);
+        goto done;
     }
 
-    /* Uncompressed point encodings are fixed size over one group, so a
-     * single scratch buffer serves all elements. */
-    octlen = EC_POINT_point2oct(ctx->group, ctx->gpt,
-                                POINT_CONVERSION_UNCOMPRESSED,
-                                NULL, 0, NULL);
-    if (octlen == 0)
-        goto end;
+    /*
+     * All points lie in one group, their uncompressed encodings share
+     * one length: probe it once, then reuse a single scratch buffer
+     * for every element.
+     */
+    buf_len = EC_POINT_point2oct(ctx->group, ctx->gpt,
+                                 POINT_CONVERSION_UNCOMPRESSED,
+                                 NULL, 0, NULL);
+    if (buf_len == 0) {
+        ERR_raise(ERR_LIB_PAEA, ERR_R_EC_LIB);
+        goto done;
+    }
+    buf = OPENSSL_zalloc(buf_len);
+    if (buf == NULL)
+        goto done;
 
-    mctx = EVP_MD_CTX_new();
-    oct = OPENSSL_malloc(octlen);
-    if (mctx == NULL || oct == NULL
-            || EVP_DigestInit_ex(mctx, ctx->md, NULL) != 1)
-        goto end;
+    if (!EVP_DigestInit(hash, ctx->md)) {
+        ERR_raise(ERR_LIB_PAEA, ERR_R_EVP_LIB);
+        goto done;
+    }
 
+    /*
+     * c = BS2IP(H_lamda(GE2OSP(g) || GE2OSP(T) || [GE2OSP(M) ||
+     *           GE2OSP(R) || [GE2OSP(N) ||] GE2OSP(X) || GE2OSP(Y) ||
+     *           sigma_S)); the element order is fixed by the standard
+     * text (7.3.4 step 2 and 7.3.5).  m_pt and n_pt are hashed in the
+     * revocation enabled variant only, sigma_S is the raw signature
+     * bytes (implementation notes, issue #4).
+     */
     if (EC_POINT_point2oct(ctx->group, ctx->gpt, POINT_CONVERSION_UNCOMPRESSED,
-                           oct, octlen, NULL) == 0
-            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* g */
-        goto end;
-    if (EC_POINT_point2oct(ctx->group, t_pt, POINT_CONVERSION_UNCOMPRESSED,
-                           oct, octlen, NULL) == 0
-            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* T */
-        goto end;
-    if (m_pt != NULL
-            && (EC_POINT_point2oct(ctx->group, m_pt,
-                                   POINT_CONVERSION_UNCOMPRESSED,
-                                   oct, octlen, NULL) == 0
-                || EVP_DigestUpdate(mctx, oct, octlen) != 1))       /* M */
-        goto end;
-    if (EC_POINT_point2oct(ctx->group, r_pt, POINT_CONVERSION_UNCOMPRESSED,
-                           oct, octlen, NULL) == 0
-            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* R/R' */
-        goto end;
-    if (n_pt != NULL
-            && (EC_POINT_point2oct(ctx->group, n_pt,
-                                   POINT_CONVERSION_UNCOMPRESSED,
-                                   oct, octlen, NULL) == 0
-                || EVP_DigestUpdate(mctx, oct, octlen) != 1))       /* N */
-        goto end;
-    if (EC_POINT_point2oct(ctx->group, x_pt, POINT_CONVERSION_UNCOMPRESSED,
-                           oct, octlen, NULL) == 0
-            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* X */
-        goto end;
-    if (EC_POINT_point2oct(ctx->group, y_pt, POINT_CONVERSION_UNCOMPRESSED,
-                           oct, octlen, NULL) == 0
-            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* Y */
-        goto end;
-    if (EVP_DigestUpdate(mctx, sig, sig_len) != 1)               /* sigma_S */
-        goto end;
-    if (EVP_DigestFinal_ex(mctx, md, &mdlen) != 1
-            || BN_bin2bn(md, (int)mdlen, c) == NULL)
-        goto end;
-    ret = 1;
-
- end:
-    OPENSSL_cleanse(md, sizeof(md));
-    OPENSSL_free(oct);
-    EVP_MD_CTX_free(mctx);
-    if (ret == 0)
+                           buf, buf_len, NULL) == 0
+            || !EVP_DigestUpdate(hash, buf, buf_len)
+            || EC_POINT_point2oct(ctx->group, t_pt, POINT_CONVERSION_UNCOMPRESSED,
+                                  buf, buf_len, NULL) == 0
+            || !EVP_DigestUpdate(hash, buf, buf_len)
+            || (m_pt != NULL
+                && (EC_POINT_point2oct(ctx->group, m_pt,
+                                       POINT_CONVERSION_UNCOMPRESSED,
+                                       buf, buf_len, NULL) == 0
+                    || !EVP_DigestUpdate(hash, buf, buf_len)))
+            || EC_POINT_point2oct(ctx->group, r_pt, POINT_CONVERSION_UNCOMPRESSED,
+                                  buf, buf_len, NULL) == 0
+            || !EVP_DigestUpdate(hash, buf, buf_len)
+            || (n_pt != NULL
+                && (EC_POINT_point2oct(ctx->group, n_pt,
+                                       POINT_CONVERSION_UNCOMPRESSED,
+                                       buf, buf_len, NULL) == 0
+                    || !EVP_DigestUpdate(hash, buf, buf_len)))
+            || EC_POINT_point2oct(ctx->group, x_pt, POINT_CONVERSION_UNCOMPRESSED,
+                                  buf, buf_len, NULL) == 0
+            || !EVP_DigestUpdate(hash, buf, buf_len)
+            || EC_POINT_point2oct(ctx->group, y_pt, POINT_CONVERSION_UNCOMPRESSED,
+                                  buf, buf_len, NULL) == 0
+            || !EVP_DigestUpdate(hash, buf, buf_len)
+            || !EVP_DigestUpdate(hash, sig, sig_len)
+            || !EVP_DigestFinal(hash, md, &mdlen)
+            || BN_bin2bn(md, (int)mdlen, c) == NULL) {
         ERR_raise(ERR_LIB_PAEA, PAEA_R_HASH_FAILED);
-    return ret;
+        goto done;
+    }
+
+    rc = 1;
+
+ done:
+    OPENSSL_cleanse(md, sizeof(md));
+    OPENSSL_free(buf);
+    EVP_MD_CTX_free(hash);
+    return rc;
 }
 
 /*
@@ -155,63 +161,75 @@ static int paea_zyhw_session_key(EVP_PAEA_CTX *ctx,
                                  const EC_POINT *dh,
                                  unsigned char **out, size_t *out_len)
 {
-    EVP_MD_CTX *mctx = NULL;
+    int rc = 0;
+    EVP_MD_CTX *hash = NULL;
     unsigned char md[EVP_MAX_MD_SIZE];
-    unsigned char *oct = NULL;
+    unsigned char *buf = NULL;
     unsigned char *sk = NULL;
-    size_t octlen;
+    size_t buf_len;
     unsigned int mdlen = 0;
-    int ret = 0;
-
-    if (ctx == NULL || y_pt == NULL || x_pt == NULL || sig == NULL
-            || su == NULL || dh == NULL || out == NULL || out_len == NULL) {
-        ERR_raise(ERR_LIB_PAEA, ERR_R_PASSED_NULL_PARAMETER);
-        return 0;
-    }
 
     *out = NULL;
     *out_len = 0;
 
-    octlen = EC_POINT_point2oct(ctx->group, y_pt,
-                                POINT_CONVERSION_UNCOMPRESSED,
-                                NULL, 0, NULL);
-    if (octlen == 0)
-        goto end;
+    hash = EVP_MD_CTX_new();
+    if (hash == NULL) {
+        ERR_raise(ERR_LIB_PAEA, ERR_R_EVP_LIB);
+        goto done;
+    }
 
-    mctx = EVP_MD_CTX_new();
-    oct = OPENSSL_malloc(octlen);
-    if (mctx == NULL || oct == NULL
-            || EVP_DigestInit_ex(mctx, ctx->md, NULL) != 1)
-        goto end;
+    buf_len = EC_POINT_point2oct(ctx->group, y_pt,
+                                 POINT_CONVERSION_UNCOMPRESSED,
+                                 NULL, 0, NULL);
+    if (buf_len == 0) {
+        ERR_raise(ERR_LIB_PAEA, ERR_R_EC_LIB);
+        goto done;
+    }
+    buf = OPENSSL_zalloc(buf_len);
+    if (buf == NULL)
+        goto done;
 
+    if (!EVP_DigestInit(hash, ctx->md)) {
+        ERR_raise(ERR_LIB_PAEA, ERR_R_EVP_LIB);
+        goto done;
+    }
+
+    /*
+     * SK = H_lamda(GE2OSP(Y) || sigma_S || GE2OSP(X) || sigma_U ||
+     *              GE2OSP(<the DH term>)); sigma_U is hashed as its
+     * canonical TL encoding (implementation notes, issue #5), the DH
+     * term is x*Y on the user side and y*X on the server side.
+     */
     if (EC_POINT_point2oct(ctx->group, y_pt, POINT_CONVERSION_UNCOMPRESSED,
-                           oct, octlen, NULL) == 0
-            || EVP_DigestUpdate(mctx, oct, octlen) != 1
-            || EVP_DigestUpdate(mctx, sig, sig_len) != 1
+                           buf, buf_len, NULL) == 0
+            || !EVP_DigestUpdate(hash, buf, buf_len)
+            || !EVP_DigestUpdate(hash, sig, sig_len)
             || EC_POINT_point2oct(ctx->group, x_pt,
                                   POINT_CONVERSION_UNCOMPRESSED,
-                                  oct, octlen, NULL) == 0
-            || EVP_DigestUpdate(mctx, oct, octlen) != 1
-            || EVP_DigestUpdate(mctx, su, su_len) != 1
+                                  buf, buf_len, NULL) == 0
+            || !EVP_DigestUpdate(hash, buf, buf_len)
+            || !EVP_DigestUpdate(hash, su, su_len)
             || EC_POINT_point2oct(ctx->group, dh,
                                   POINT_CONVERSION_UNCOMPRESSED,
-                                  oct, octlen, NULL) == 0
-            || EVP_DigestUpdate(mctx, oct, octlen) != 1)
-        goto end;
-    if (EVP_DigestFinal_ex(mctx, md, &mdlen) != 1)
-        goto end;
+                                  buf, buf_len, NULL) == 0
+            || !EVP_DigestUpdate(hash, buf, buf_len)
+            || !EVP_DigestFinal(hash, md, &mdlen)) {
+        ERR_raise(ERR_LIB_PAEA, PAEA_R_HASH_FAILED);
+        goto done;
+    }
+
     sk = OPENSSL_memdup(md, mdlen);
     if (sk == NULL)
-        goto end;
+        goto done;
     *out = sk;
     *out_len = mdlen;
-    ret = 1;
+    rc = 1;
 
- end:
+ done:
     OPENSSL_cleanse(md, sizeof(md));
-    OPENSSL_free(oct);
-    EVP_MD_CTX_free(mctx);
-    return ret;
+    OPENSSL_free(buf);
+    EVP_MD_CTX_free(hash);
+    return rc;
 }
 
 /*
