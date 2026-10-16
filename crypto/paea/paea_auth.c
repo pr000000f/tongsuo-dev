@@ -69,18 +69,25 @@ static int paea_zyhw_challenge(EVP_PAEA_CTX *ctx,
     unsigned int mdlen = 0;
     int ret = 0;
 
-    /*
-     * Uncompressed point encodings are fixed size over one group, so a
-     * single scratch buffer serves all elements.
-     */
+    /* m_pt and n_pt are optional: they are only hashed in the
+     * revocation enabled variant of the mechanism. */
+    if (ctx == NULL || t_pt == NULL || r_pt == NULL || x_pt == NULL
+            || y_pt == NULL || sig == NULL || c == NULL) {
+        ERR_raise(ERR_LIB_PAEA, ERR_R_PASSED_NULL_PARAMETER);
+        return 0;
+    }
+
+    /* Uncompressed point encodings are fixed size over one group, so a
+     * single scratch buffer serves all elements. */
     octlen = EC_POINT_point2oct(ctx->group, ctx->gpt,
                                 POINT_CONVERSION_UNCOMPRESSED,
                                 NULL, 0, NULL);
     if (octlen == 0)
         goto end;
+
+    mctx = EVP_MD_CTX_new();
     oct = OPENSSL_malloc(octlen);
-    if (oct == NULL
-            || (mctx = EVP_MD_CTX_new()) == NULL
+    if (mctx == NULL || oct == NULL
             || EVP_DigestInit_ex(mctx, ctx->md, NULL) != 1)
         goto end;
 
@@ -118,9 +125,8 @@ static int paea_zyhw_challenge(EVP_PAEA_CTX *ctx,
         goto end;
     if (EVP_DigestUpdate(mctx, sig, sig_len) != 1)               /* sigma_S */
         goto end;
-    if (EVP_DigestFinal_ex(mctx, md, &mdlen) != 1)
-        goto end;
-    if (BN_bin2bn(md, (int)mdlen, c) == NULL)
+    if (EVP_DigestFinal_ex(mctx, md, &mdlen) != 1
+            || BN_bin2bn(md, (int)mdlen, c) == NULL)
         goto end;
     ret = 1;
 
@@ -152,10 +158,16 @@ static int paea_zyhw_session_key(EVP_PAEA_CTX *ctx,
     EVP_MD_CTX *mctx = NULL;
     unsigned char md[EVP_MAX_MD_SIZE];
     unsigned char *oct = NULL;
+    unsigned char *sk = NULL;
     size_t octlen;
     unsigned int mdlen = 0;
-    unsigned char *sk = NULL;
     int ret = 0;
+
+    if (ctx == NULL || y_pt == NULL || x_pt == NULL || sig == NULL
+            || su == NULL || dh == NULL || out == NULL || out_len == NULL) {
+        ERR_raise(ERR_LIB_PAEA, ERR_R_PASSED_NULL_PARAMETER);
+        return 0;
+    }
 
     *out = NULL;
     *out_len = 0;
@@ -165,9 +177,10 @@ static int paea_zyhw_session_key(EVP_PAEA_CTX *ctx,
                                 NULL, 0, NULL);
     if (octlen == 0)
         goto end;
+
+    mctx = EVP_MD_CTX_new();
     oct = OPENSSL_malloc(octlen);
-    if (oct == NULL
-            || (mctx = EVP_MD_CTX_new()) == NULL
+    if (mctx == NULL || oct == NULL
             || EVP_DigestInit_ex(mctx, ctx->md, NULL) != 1)
         goto end;
 
