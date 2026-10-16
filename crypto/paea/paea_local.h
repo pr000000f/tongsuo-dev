@@ -196,12 +196,7 @@ int paea_rdr_take_point(const EC_GROUP *group, PAEA_RDR *r, EC_POINT *pt,
 int paea_rdr_take_int(PAEA_RDR *r, BIGNUM *bn, size_t *consumed);
 
 /* Low level primitives */
-size_t paea_oct_point_len(const EC_GROUP *group); /* encoded point size */
 size_t paea_i2osp_len(EVP_PAEA_CTX *ctx);        /* fixed integer width  */
-int paea_h_lamda(EVP_PAEA_CTX *ctx, PAEA_BUF *in, unsigned char *out,
-                 size_t *outlen);
-int paea_h_update_point(EVP_PAEA_CTX *ctx, EVP_MD_CTX *mctx, const EC_POINT *pt);
-int paea_h_update_int(EVP_PAEA_CTX *ctx, EVP_MD_CTX *mctx, const BIGNUM *bn);
 int paea_m_of_uid(EVP_PAEA_CTX *ctx, const unsigned char *uid, size_t uid_len,
                   BIGNUM *m);                     /* m, reduced mod q */
 int paea_hash_bs2ip(EVP_PAEA_CTX *ctx, const unsigned char *msg,

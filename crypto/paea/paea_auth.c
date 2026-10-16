@@ -73,22 +73,59 @@ static int paea_zyhw_challenge(EVP_PAEA_CTX *ctx,
 {
     EVP_MD_CTX *mctx = NULL;
     unsigned char md[EVP_MAX_MD_SIZE];
+    unsigned char *oct = NULL;
+    size_t octlen;
     unsigned int mdlen = 0;
     int ret = 0;
 
-    if ((mctx = EVP_MD_CTX_new()) == NULL)
+    /*
+     * Uncompressed point encodings are fixed size over one group, so a
+     * single scratch buffer serves all elements.
+     */
+    octlen = EC_POINT_point2oct(ctx->group, ctx->gpt,
+                                POINT_CONVERSION_UNCOMPRESSED,
+                                NULL, 0, NULL);
+    if (octlen == 0)
         goto end;
-    if (EVP_DigestInit_ex(mctx, ctx->md, NULL) != 1)
+    oct = OPENSSL_malloc(octlen);
+    if (oct == NULL
+            || (mctx = EVP_MD_CTX_new()) == NULL
+            || EVP_DigestInit_ex(mctx, ctx->md, NULL) != 1)
         goto end;
 
-    if (!paea_h_update_point(ctx, mctx, ctx->gpt)      /* g */
-            || !paea_h_update_point(ctx, mctx, t_pt)   /* T */
-            || (m_pt != NULL && !paea_h_update_point(ctx, mctx, m_pt))
-            || !paea_h_update_point(ctx, mctx, r_pt)   /* R or R' */
-            || (n_pt != NULL && !paea_h_update_point(ctx, mctx, n_pt))
-            || !paea_h_update_point(ctx, mctx, x_pt)   /* X */
-            || !paea_h_update_point(ctx, mctx, y_pt)  /* Y */
-            || EVP_DigestUpdate(mctx, sig, sig_len) != 1)
+    if (EC_POINT_point2oct(ctx->group, ctx->gpt, POINT_CONVERSION_UNCOMPRESSED,
+                           oct, octlen, NULL) == 0
+            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* g */
+        goto end;
+    if (EC_POINT_point2oct(ctx->group, t_pt, POINT_CONVERSION_UNCOMPRESSED,
+                           oct, octlen, NULL) == 0
+            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* T */
+        goto end;
+    if (m_pt != NULL
+            && (EC_POINT_point2oct(ctx->group, m_pt,
+                                   POINT_CONVERSION_UNCOMPRESSED,
+                                   oct, octlen, NULL) == 0
+                || EVP_DigestUpdate(mctx, oct, octlen) != 1))       /* M */
+        goto end;
+    if (EC_POINT_point2oct(ctx->group, r_pt, POINT_CONVERSION_UNCOMPRESSED,
+                           oct, octlen, NULL) == 0
+            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* R/R' */
+        goto end;
+    if (n_pt != NULL
+            && (EC_POINT_point2oct(ctx->group, n_pt,
+                                   POINT_CONVERSION_UNCOMPRESSED,
+                                   oct, octlen, NULL) == 0
+                || EVP_DigestUpdate(mctx, oct, octlen) != 1))       /* N */
+        goto end;
+    if (EC_POINT_point2oct(ctx->group, x_pt, POINT_CONVERSION_UNCOMPRESSED,
+                           oct, octlen, NULL) == 0
+            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* X */
+        goto end;
+    if (EC_POINT_point2oct(ctx->group, y_pt, POINT_CONVERSION_UNCOMPRESSED,
+                           oct, octlen, NULL) == 0
+            || EVP_DigestUpdate(mctx, oct, octlen) != 1)            /* Y */
+        goto end;
+    if (EVP_DigestUpdate(mctx, sig, sig_len) != 1)               /* sigma_S */
         goto end;
     if (EVP_DigestFinal_ex(mctx, md, &mdlen) != 1)
         goto end;
@@ -98,6 +135,7 @@ static int paea_zyhw_challenge(EVP_PAEA_CTX *ctx,
 
  end:
     OPENSSL_cleanse(md, sizeof(md));
+    OPENSSL_free(oct);
     EVP_MD_CTX_free(mctx);
     if (ret == 0)
         ERR_raise(ERR_LIB_PAEA, PAEA_R_HASH_FAILED);
@@ -122,6 +160,8 @@ static int paea_zyhw_session_key(EVP_PAEA_CTX *ctx,
 {
     EVP_MD_CTX *mctx = NULL;
     unsigned char md[EVP_MAX_MD_SIZE];
+    unsigned char *oct = NULL;
+    size_t octlen;
     unsigned int mdlen = 0;
     unsigned char *sk = NULL;
     int ret = 0;
@@ -129,15 +169,30 @@ static int paea_zyhw_session_key(EVP_PAEA_CTX *ctx,
     *out = NULL;
     *out_len = 0;
 
-    if ((mctx = EVP_MD_CTX_new()) == NULL)
+    octlen = EC_POINT_point2oct(ctx->group, y_pt,
+                                POINT_CONVERSION_UNCOMPRESSED,
+                                NULL, 0, NULL);
+    if (octlen == 0)
         goto end;
-    if (EVP_DigestInit_ex(mctx, ctx->md, NULL) != 1)
+    oct = OPENSSL_malloc(octlen);
+    if (oct == NULL
+            || (mctx = EVP_MD_CTX_new()) == NULL
+            || EVP_DigestInit_ex(mctx, ctx->md, NULL) != 1)
         goto end;
-    if (!paea_h_update_point(ctx, mctx, y_pt)
+
+    if (EC_POINT_point2oct(ctx->group, y_pt, POINT_CONVERSION_UNCOMPRESSED,
+                           oct, octlen, NULL) == 0
+            || EVP_DigestUpdate(mctx, oct, octlen) != 1
             || EVP_DigestUpdate(mctx, sig, sig_len) != 1
-            || !paea_h_update_point(ctx, mctx, x_pt)
+            || EC_POINT_point2oct(ctx->group, x_pt,
+                                  POINT_CONVERSION_UNCOMPRESSED,
+                                  oct, octlen, NULL) == 0
+            || EVP_DigestUpdate(mctx, oct, octlen) != 1
             || EVP_DigestUpdate(mctx, su, su_len) != 1
-            || !paea_h_update_point(ctx, mctx, dh))
+            || EC_POINT_point2oct(ctx->group, dh,
+                                  POINT_CONVERSION_UNCOMPRESSED,
+                                  oct, octlen, NULL) == 0
+            || EVP_DigestUpdate(mctx, oct, octlen) != 1)
         goto end;
     if (EVP_DigestFinal_ex(mctx, md, &mdlen) != 1)
         goto end;
@@ -150,6 +205,7 @@ static int paea_zyhw_session_key(EVP_PAEA_CTX *ctx,
 
  end:
     OPENSSL_cleanse(md, sizeof(md));
+    OPENSSL_free(oct);
     EVP_MD_CTX_free(mctx);
     return ret;
 }
@@ -189,7 +245,11 @@ int paea_zyhw_server_auth_init(EVP_PAEA_CTX *ctx, PAEA_BUF *msg)
         goto err;
 
     /* sigma_S = Sign_sk(GE2OSP(Y)) over the canonical point encoding */
-    yenc_len = paea_oct_point_len(ctx->group);
+    yenc_len = EC_POINT_point2oct(ctx->group, y_pt,
+                                  POINT_CONVERSION_UNCOMPRESSED,
+                                  NULL, 0, NULL);
+    if (yenc_len == 0)
+        goto err;
     yenc = OPENSSL_malloc(yenc_len);
     if (yenc == NULL
             || EC_POINT_point2oct(ctx->group, y_pt,
@@ -277,9 +337,14 @@ int paea_zyhw_user_prove(EVP_PAEA_CTX *ctx, const unsigned char *pw,
 
     /* step 2a: verify the server signature on Y */
     {
-        size_t ylen = paea_oct_point_len(ctx->group);
-        unsigned char *yenc = OPENSSL_malloc(ylen);
+        size_t ylen = EC_POINT_point2oct(ctx->group, y_pt,
+                                         POINT_CONVERSION_UNCOMPRESSED,
+                                         NULL, 0, NULL);
+        unsigned char *yenc;
 
+        if (ylen == 0)
+            goto err;
+        yenc = OPENSSL_malloc(ylen);
         if (yenc == NULL)
             goto err;
         if (EC_POINT_point2oct(ctx->group, y_pt,

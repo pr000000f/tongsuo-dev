@@ -262,13 +262,6 @@ int paea_ctx_setup_crl(EVP_PAEA_CTX *ctx, int capacity)
  * Encoded sizes
  */
 
-size_t paea_oct_point_len(const EC_GROUP *group)
-{
-    size_t fieldlen = ((size_t)EC_GROUP_get_degree(group) + 7) / 8;
-
-    return 1 + 2 * fieldlen;
-}
-
 size_t paea_i2osp_len(EVP_PAEA_CTX *ctx)
 {
     return ctx->qlen;
@@ -373,8 +366,12 @@ int paea_buf_raw(PAEA_BUF *b, const void *p, size_t len)
 /* TL(group element): len = encoded point size */
 int paea_buf_point(EVP_PAEA_CTX *ctx, PAEA_BUF *b, const EC_POINT *pt)
 {
-    size_t octlen = paea_oct_point_len(ctx->group);
+    size_t octlen = EC_POINT_point2oct(ctx->group, pt,
+                                       POINT_CONVERSION_UNCOMPRESSED,
+                                       NULL, 0, NULL);
 
+    if (octlen == 0)
+        return 0;
     if (!paea_buf_u32(b, (uint32_t)octlen))
         return 0;
     if (!paea_buf_reserve(b, octlen))
@@ -519,78 +516,6 @@ int paea_rdr_take_int(PAEA_RDR *r, BIGNUM *bn, size_t *consumed)
     if (consumed != NULL)
         *consumed = 4 + len;
     return 1;
-}
-
-/*
- * Hashing helpers
- */
-
-int paea_h_lamda(EVP_PAEA_CTX *ctx, PAEA_BUF *in, unsigned char *out,
-                 size_t *outlen)
-{
-    size_t mdlen = (size_t)EVP_MD_get_size(ctx->md);
-    size_t len = mdlen;
-
-    if (in == NULL || in->error) {
-        ERR_raise(ERR_LIB_PAEA, PAEA_R_HASH_FAILED);
-        return 0;
-    }
-    if (out == NULL) {
-        *outlen = mdlen;
-        return 1;
-    }
-    if (*outlen < mdlen) {
-        *outlen = mdlen;
-        ERR_raise(ERR_LIB_PAEA, PAEA_R_HASH_FAILED);
-        return 0;
-    }
-    if (EVP_Q_digest(ctx->libctx, ctx->digest_name, ctx->propq,
-                     in->data, in->len, out, &len) != 1) {
-        ERR_raise(ERR_LIB_PAEA, PAEA_R_HASH_FAILED);
-        return 0;
-    }
-    *outlen = len;
-    return 1;
-}
-
-/* Streaming update helpers for one-shot challenge hashing: the digest md
- * must have been initialised by the caller. */
-int paea_h_update_point(EVP_PAEA_CTX *ctx, EVP_MD_CTX *mctx, const EC_POINT *pt)
-{
-    size_t octlen = paea_oct_point_len(ctx->group);
-    unsigned char *oct;
-    int ret;
-
-    oct = OPENSSL_malloc(octlen);
-    if (oct == NULL)
-        return 0;
-    if (EC_POINT_point2oct(ctx->group, pt, POINT_CONVERSION_UNCOMPRESSED,
-                           oct, octlen, NULL) == 0) {
-        OPENSSL_free(oct);
-        return 0;
-    }
-    ret = EVP_DigestUpdate(mctx, oct, octlen) == 1;
-    OPENSSL_free(oct);
-    return ret;
-}
-
-int paea_h_update_int(EVP_PAEA_CTX *ctx, EVP_MD_CTX *mctx, const BIGNUM *bn)
-{
-    unsigned char *oct;
-    int ret;
-
-    if (bn == NULL)
-        return 0;
-    oct = OPENSSL_malloc(ctx->qlen);
-    if (oct == NULL)
-        return 0;
-    if (BN_bn2binpad(bn, oct, (int)ctx->qlen) != (int)ctx->qlen) {
-        OPENSSL_free(oct);
-        return 0;
-    }
-    ret = EVP_DigestUpdate(mctx, oct, ctx->qlen) == 1;
-    OPENSSL_free(oct);
-    return ret;
 }
 
 /*
