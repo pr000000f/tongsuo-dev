@@ -18,8 +18,9 @@
 
 # include <openssl/macros.h>
 # include <openssl/opensslconf.h>
-# include <openssl/params.h>
-# include <openssl/obj_mac.h>
+# include <openssl/bn.h>
+# include <openssl/ec.h>
+# include <openssl/evp.h>
 
 # ifndef OPENSSL_NO_PAEA
 # ifdef  __cplusplus
@@ -27,120 +28,252 @@ extern "C" {
 # endif
 
 /*
- * GB/T 34953.4 anonymous entity authentication based on weak secrets.
+ * GB/T 34953.4 ZYHW (7.3).  Callers hold the group, keys, accumulator and
+ * CRL themselves; there is no PAEA context object.
  *
- * Mechanisms are selected by their NID, as defined by the OIDs in
- * appendix A of the standard text (see also crypto/objects/objects.txt):
- *   NID_zyhw_mechanism  {iso(1) standard(0) anonymous-entity-authentication(20009)
- *                        part4(4) storage-extra(2) zyhw(2)}
+ * Setup returns r, w = r*g, the signing key and (when revocation is on)
+ * the empty accumulator B_0 = g.  Registration returns an issued byte
+ * string; the user wraps that into sigma_pw.  Authentication is the
+ * 3-pass exchange: the server keeps y, Y and sigma_S from init and
+ * passes them back into verify.
  *
- * Currently implemented mechanism(s):
- *   - ZYHW (7.3): anonymous entity authentication based on auxiliary storage
- *     (password wrapped credential), with optional user revocation support.
+ * The caller frees every *out buffer with OPENSSL_free.  Byte strings
+ * use the following fields.  A field whose width the curve or the digest
+ * already determines has no length prefix.
  *
- * A ZYHW instance is driven by an EVP_PAEA_CTX.  Typical call sequences:
- *
- * Server:
- *   ctx = EVP_PAEA_CTX_new(libctx, propq);
- *   EVP_PAEA_CTX_set_params(ctx, [mechanism, group, digest, signature,
- *                                 revocation, ...]);
- *   EVP_PAEA_setup(ctx);
- *   // publish "params", keep "servkey" (both via EVP_PAEA_CTX_get_params)
- *   EVP_PAEA_server_issue_credential(ctx, uid, ..., out, &len);  // -> user
- *   ...
- *   EVP_PAEA_server_auth_init(ctx, msg1, &len);       // -> user
- *   EVP_PAEA_server_auth_verify(ctx, msg2, len);      // <- user, returns 1/0
- *   EVP_PAEA_CTX_get_session_key(ctx, sk, &sklen);    // if ACCEPT
- *   EVP_PAEA_server_revoke(ctx, uid, ...);            // revocation
- *
- * User:
- *   ctx = EVP_PAEA_CTX_new(libctx, propq);
- *   EVP_PAEA_CTX_set_params(ctx, [mechanism=zyhw, params, credential]);
- *   // or: register with the issued credential:
- *   // EVP_PAEA_user_store_credential(ctx, uid, pw, issued, ...);
- *   EVP_PAEA_user_auth_prove(ctx, pw, ..., msg1, len, msg2, &msg2len);
- *   EVP_PAEA_CTX_get_session_key(ctx, sk, &sklen);
- *   EVP_PAEA_user_update_witness(ctx);  // after importing an updated "crl"
+ *   point    uncompressed, GB/T 32918.1 4.2.9: 0x04 || X || Y.
+ *            X and Y are field elements (4.2.6).  The width is fixed
+ *            by the curve.
+ *   scalar   an integer in Z_q, |q| bytes.  q is the group order.
+ *   c        the challenge, |H| bytes.  H is the digest named by md.
+ *   u32      four bytes, most significant byte first.
  */
 
-/*
- * EVP_PAEA_CTX set_params() keys
+typedef struct paea_crl_entry_st {
+    BIGNUM *m;                  /* identifier, in Z_q */
+    EC_POINT *b;                /* accumulator value B_i */
+} PAEA_CRL_ENTRY;
+
+/** Frees an array from paea_crl_revoke or paea_decode_crl_blob.
+ *  \param  arr  entry array, or NULL
+ *  \param  n    number of entries
  */
+void paea_crl_entries_free(PAEA_CRL_ENTRY *arr, size_t n);
 
-/* Operational parameters (all UTF8 strings unless stated otherwise) */
-# define OSSL_PAEA_PARAM_MECHANISM       "mechanism"    /* NID, integer */
-# define OSSL_PAEA_PARAM_GROUP            "group"        /* EC curve name */
-# define OSSL_PAEA_PARAM_DIGEST           "digest"       /* H_lamda digest */
-# define OSSL_PAEA_PARAM_SIGNATURE        "signature"    /* sig key type:
-                                                          * "SM2" or "EC" */
-# define OSSL_PAEA_PARAM_SIG_DIGEST       "sig-digest"   /* digest used with
-                                                         * the signature
-                                                         * scheme */
-# define OSSL_PAEA_PARAM_SIG_CURVE        "sig-curve"   /* ECDSA signing key
-                                                         * curve (keytype EC) */
-# define OSSL_PAEA_PARAM_REVOCATION        "revocation"  /* 0/1, integer */
-
-/* Serialised objects, octet strings.  Shared "params" is the trusted copy of
- * the public system parameters the user retrieves out of band.  */
-# define OSSL_PAEA_PARAM_PARAMS           "params"       /* server public
-                                                         * parameters blob */
-# define OSSL_PAEA_PARAM_SERVKEY          "servkey"     /* server private
-                                                         * key blob */
-# define OSSL_PAEA_PARAM_CRL              "crl"         /* credential
-                                                         * revocation list */
-# define OSSL_PAEA_PARAM_CREDENTIAL       "credential"  /* password wrapped
-                                                         * credential blob */
-# define OSSL_PAEA_PARAM_SESSION_KEY      "session-key" /* negotiated SK */
-
-/*
- * PAEA context: the state of one mechanism instance (server or user
- * side).  The internals are opaque and live in crypto/paea/.
+/** m = BS2IP(H(uid)) mod q.  The caller owns m.
+ *  \param  md       H_λ
+ *  \param  group    curve; q is its order
+ *  \param  uid      user identifier I_U
+ *  \param  uid_len  length of uid
+ *  \param  m        output, already allocated
+ *  \return 1 on success, 0 on error
  */
-typedef struct evp_paea_ctx_st EVP_PAEA_CTX;
+int paea_m_of_uid(const EVP_MD *md, const EC_GROUP *group,
+                  const unsigned char *uid, size_t uid_len, BIGNUM *m);
 
-/*
- * Output buffers of EVP_PAEA_server_issue_credential(),
- * EVP_PAEA_server_auth_init(), EVP_PAEA_user_auth_prove() and
- * EVP_PAEA_CTX_get_session_key() may be NULL, in which case the required
- * size is returned in *out_len and the call succeeds without writing
- * anything.
+/** Setup (7.3.2).  Outputs are newly allocated.
+ *  \param  group            mechanism curve
+ *  \param  sig_type         "SM2", or "EC" / "ECDSA"
+ *  \param  sig_digest_name  signature digest for a non-SM2 key.
+ *                           NULL selects SHA-256.  SM2 always uses SM3.
+ *  \param  sig_curve_name   curve of a non-SM2 signing key.  NULL uses
+ *                           the name of group.  Ignored for SM2.
+ *  \param  libctx           library context, or NULL
+ *  \param  propq            property query, or NULL
+ *  \param  revocation       non-zero to enable revocation
+ *  \param  r                server secret, in Z_q*
+ *  \param  w                w = r*g
+ *  \param  acc              B_0 = g when revocation is on, otherwise NULL
+ *  \param  sig_key          signing key pair
+ *  \param  sig_digest_out   digest name actually selected; free with
+ *                           OPENSSL_free
+ *  \return 1 on success, 0 on error
  */
+int paea_zyhw_setup(const EC_GROUP *group, const char *sig_type,
+                    const char *sig_digest_name, const char *sig_curve_name,
+                    OSSL_LIB_CTX *libctx, const char *propq, int revocation,
+                    BIGNUM **r, EC_POINT **w, EC_POINT **acc,
+                    EVP_PKEY **sig_key, char **sig_digest_out);
 
-EVP_PAEA_CTX *EVP_PAEA_CTX_new(OSSL_LIB_CTX *libctx, const char *propq);
-void EVP_PAEA_CTX_free(EVP_PAEA_CTX *ctx);
+/** Registration (7.3.3).
+ *  Format of *out:
+ *    no revocation:   point(sigma)
+ *    revocation:      point(sigma) || u32 index || point(W)
+ *  index is crl_len, the witness version.
+ *  \param  group    mechanism curve
+ *  \param  md       H_λ, the same digest the user will use
+ *  \param  r        server secret from setup
+ *  \param  acc      current accumulator B_n, or NULL if revocation is off
+ *  \param  crl_len  CRL length this witness is issued against
+ *  \param  uid      user identifier I_U
+ *  \param  uid_len  length of uid
+ *  \param  out      issued byte string
+ *  \param  out_len  length of *out
+ *  \return 1 on success, 0 on error
+ */
+int paea_zyhw_issue_credential(const EC_GROUP *group, const EVP_MD *md,
+                               const BIGNUM *r, const EC_POINT *acc,
+                               size_t crl_len,
+                               const unsigned char *uid, size_t uid_len,
+                               unsigned char **out, size_t *out_len);
 
-int EVP_PAEA_CTX_set_params(EVP_PAEA_CTX *ctx, const OSSL_PARAM params[]);
-int EVP_PAEA_CTX_get_params(EVP_PAEA_CTX *ctx, OSSL_PARAM params[]);
+/** sigma_pw = sigma + H_g(pw).  m, sigma_pw and, when revocation is on,
+ *  witness are newly allocated.
+ *  \param  group         mechanism curve
+ *  \param  md            H_λ
+ *  \param  uid           the same I_U the server registered
+ *  \param  uid_len       length of uid
+ *  \param  pw            password
+ *  \param  pw_len        length of pw
+ *  \param  issued        byte string from paea_zyhw_issue_credential
+ *  \param  issued_len    length of issued
+ *  \param  revocation    non-zero if issued contains index and W
+ *  \param  m             output, m = BS2IP(H(uid)) mod q
+ *  \param  sigma_pw      output, the password-wrapped credential
+ *  \param  witness       output W, or NULL when revocation is off
+ *  \param  witness_idx   output, the CRL index stored in issued, or 0
+ *  \return 1 on success, 0 on error
+ */
+int paea_zyhw_wrap_credential(const EC_GROUP *group, const EVP_MD *md,
+                              const unsigned char *uid, size_t uid_len,
+                              const unsigned char *pw, size_t pw_len,
+                              const unsigned char *issued, size_t issued_len,
+                              int revocation,
+                              BIGNUM **m, EC_POINT **sigma_pw,
+                              EC_POINT **witness, uint32_t *witness_idx);
 
-/* Setup (server side): pick fresh r, revocation key and signing key */
-int EVP_PAEA_setup(EVP_PAEA_CTX *ctx);
+/** Append m to the CRL and replace *acc with B_n^(1/(r+m)).
+ *  The new entry's point is owned by the CRL.
+ *  \param  group      mechanism curve
+ *  \param  r          server secret
+ *  \param  acc        current B_n; replaced by the new accumulator
+ *  \param  crl        entry array, grown as needed; NULL is an empty list
+ *  \param  crl_len    number of entries
+ *  \param  crl_alloc  allocated capacity of *crl, in entries
+ *  \param  m          identifier to revoke, in Z_q
+ *  \return 1 on success, 0 on error.  A repeated m is rejected.
+ */
+int paea_crl_revoke(const EC_GROUP *group, const BIGNUM *r, EC_POINT **acc,
+                    PAEA_CRL_ENTRY **crl, size_t *crl_len, size_t *crl_alloc,
+                    const BIGNUM *m);
 
-/* Registration */
-int EVP_PAEA_server_issue_credential(EVP_PAEA_CTX *ctx,
-                                     const unsigned char *uid, size_t uid_len,
-                                     unsigned char *out, size_t *out_len);
-int EVP_PAEA_user_store_credential(EVP_PAEA_CTX *ctx,
-                                   const unsigned char *uid, size_t uid_len,
-                                   const unsigned char *pw, size_t pw_len,
-                                   const unsigned char *issued,
-                                   size_t issued_len);
+/** Apply CRL entries from *witness_idx onward:
+ *    W <- (W - B_i) * 1/(m_i - m)
+ *  \param  group        mechanism curve
+ *  \param  m            this user's identifier
+ *  \param  witness      in/out W
+ *  \param  witness_idx  in/out index of the next entry to apply
+ *  \param  crl          CRL the user now holds
+ *  \param  crl_len      number of entries
+ *  \return 1 on success, 0 on error.  m_i = m means this user is revoked.
+ */
+int paea_zyhw_update_witness(const EC_GROUP *group, const BIGNUM *m,
+                             EC_POINT *witness, uint32_t *witness_idx,
+                             const PAEA_CRL_ENTRY *crl, size_t crl_len);
 
-/* Anonymous entity authentication */
-int EVP_PAEA_server_auth_init(EVP_PAEA_CTX *ctx,
-                              unsigned char *out, size_t *out_len);
-int EVP_PAEA_user_auth_prove(EVP_PAEA_CTX *ctx,
-                             const unsigned char *pw, size_t pw_len,
-                             const unsigned char *msg1, size_t msg1_len,
-                             unsigned char *out, size_t *out_len);
-int EVP_PAEA_server_auth_verify(EVP_PAEA_CTX *ctx,
-                                const unsigned char *msg2, size_t msg2_len);
-int EVP_PAEA_CTX_get_session_key(EVP_PAEA_CTX *ctx,
-                                 unsigned char *out, size_t *out_len);
+/** Encode a CRL.
+ *  Format of *out:
+ *    u8 version (3) || u32 count || count * (scalar(m_i) || point(B_i))
+ *  \param  group    mechanism curve
+ *  \param  crl      entries; NULL is allowed when crl_len is 0
+ *  \param  crl_len  number of entries
+ *  \param  out      encoded byte string
+ *  \param  out_len  length of *out
+ *  \return 1 on success, 0 on error
+ */
+int paea_encode_crl_blob(const EC_GROUP *group, const PAEA_CRL_ENTRY *crl,
+                         size_t crl_len, unsigned char **out, size_t *out_len);
 
-/* Revocation */
-int EVP_PAEA_server_revoke(EVP_PAEA_CTX *ctx,
-                           const unsigned char *uid, size_t uid_len);
-int EVP_PAEA_user_update_witness(EVP_PAEA_CTX *ctx);
+/** Decode the byte string from paea_encode_crl_blob.
+ *  *crl is newly allocated; free it with paea_crl_entries_free.
+ *  \param  group     mechanism curve
+ *  \param  blob      encoded CRL
+ *  \param  blob_len  length of blob
+ *  \param  crl       output entry array
+ *  \param  crl_len   number of entries
+ *  \return 1 on success, 0 on error
+ */
+int paea_decode_crl_blob(const EC_GROUP *group, const unsigned char *blob,
+                         size_t blob_len, PAEA_CRL_ENTRY **crl, size_t *crl_len);
+
+/** Pass 1, server to user.
+ *  Format of *out:
+ *    point(Y) || u32 sig_len || sigma_S
+ *  sigma_S is the DER signature over point(Y).
+ *  \param  group        mechanism curve
+ *  \param  sign_key     server signing key
+ *  \param  md           signature digest; SM3 when sign_key is SM2
+ *  \param  out          message sent to the user
+ *  \param  out_len      length of *out
+ *  \param  y            server ephemeral scalar; pass back to verify
+ *  \param  y_pt         Y = y*g; pass back to verify
+ *  \param  sigma_s      signature bytes, the same sigma_S without its length
+ *  \param  sigma_s_len  length of *sigma_s
+ *  \return 1 on success, 0 on error
+ */
+int paea_zyhw_server_auth_init(const EC_GROUP *group, EVP_PKEY *sign_key,
+                               const EVP_MD *md,
+                               unsigned char **out, size_t *out_len,
+                               BIGNUM **y, EC_POINT **y_pt,
+                               unsigned char **sigma_s, size_t *sigma_s_len);
+
+/** Pass 2, user to server.  Revocation is on when acc != NULL.
+ *  Format of *out is point(X) || sigma_U, where sigma_U is:
+ *    no revocation:  point(T) || c || scalar(s_m) || scalar(s_a)
+ *    revocation:     point(T) || point(M) || c || scalar(s_m)
+ *                    || scalar(s_a) || scalar(s_z)
+ *  \param  group           mechanism curve
+ *  \param  md              H_λ
+ *  \param  pw_credential   sigma_pw from paea_zyhw_wrap_credential
+ *  \param  m               this user's identifier
+ *  \param  verify_key      server signature public key
+ *  \param  witness         W, or NULL when revocation is off
+ *  \param  acc             user's B_n, or NULL when revocation is off
+ *  \param  pw              password
+ *  \param  pw_len          length of pw
+ *  \param  msg1            message from paea_zyhw_server_auth_init
+ *  \param  msg1_len        length of msg1
+ *  \param  out             message sent to the server
+ *  \param  out_len         length of *out
+ *  \param  session_key     optional.  Both this and session_key_len must
+ *                          be non-NULL to receive it.  Raw digest, |H| bytes.
+ *  \param  session_key_len length of *session_key
+ *  \return 1 on success, 0 on error
+ */
+int paea_zyhw_user_prove(const EC_GROUP *group, EVP_MD *md,
+                         const EC_POINT *pw_credential, const BIGNUM *m,
+                         EVP_PKEY *verify_key,
+                         const EC_POINT *witness, const EC_POINT *acc,
+                         const unsigned char *pw, size_t pw_len,
+                         const unsigned char *msg1, size_t msg1_len,
+                         unsigned char **out, size_t *out_len,
+                         unsigned char **session_key, size_t *session_key_len);
+
+/** Pass 3.  Returns 1 for ACCEPT and 0 for REJECT.
+ *  \param  group            mechanism curve
+ *  \param  md               H_λ
+ *  \param  r                server secret
+ *  \param  y                ephemeral scalar from paea_zyhw_server_auth_init
+ *  \param  y_pt             Y from paea_zyhw_server_auth_init
+ *  \param  sigma_s          signature bytes from paea_zyhw_server_auth_init,
+ *                           not the whole first message
+ *  \param  sigma_s_len      length of sigma_s
+ *  \param  acc              server's current B_n, or NULL when revocation
+ *                           is off
+ *  \param  msg2             message from paea_zyhw_user_prove
+ *  \param  msg2_len         length of msg2
+ *  \param  session_key      optional, same rule as paea_zyhw_user_prove.
+ *                           Raw digest, |H| bytes.
+ *  \param  session_key_len  length of *session_key
+ */
+int paea_zyhw_server_verify(const EC_GROUP *group, EVP_MD *md,
+                            const BIGNUM *r, const BIGNUM *y,
+                            const EC_POINT *y_pt,
+                            const unsigned char *sigma_s, size_t sigma_s_len,
+                            const EC_POINT *acc,
+                            const unsigned char *msg2, size_t msg2_len,
+                            unsigned char **session_key,
+                            size_t *session_key_len);
 
 # ifdef  __cplusplus
 }

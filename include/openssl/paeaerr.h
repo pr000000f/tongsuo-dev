@@ -24,21 +24,12 @@
 /*
  * PAEA reason codes.
  */
-# define PAEA_R_BAD_CREDENTIAL_BLOB                 112
 # define PAEA_R_BAD_CRL_BLOB                        113
 # define PAEA_R_BAD_MESSAGE                         114
-# define PAEA_R_BAD_PARAMS_BLOB                     110
 # define PAEA_R_BAD_POINT                           120
-# define PAEA_R_BAD_SERVKEY_BLOB                    111
 # define PAEA_R_COORDINATE_FAILED                   124
-# define PAEA_R_DIGEST_INIT_FAILED                  104
 # define PAEA_R_HASH_FAILED                         122
-# define PAEA_R_INVALID_DIGEST                      105
-# define PAEA_R_INVALID_GROUP                       103
-# define PAEA_R_INVALID_SIGNATURE_SCHEME            106
 # define PAEA_R_KEYGEN_FAILED                       123
-# define PAEA_R_NO_CREDENTIAL                       116
-# define PAEA_R_NO_SESSION_KEY                      117
 # define PAEA_R_NOT_INITIALIZED                     109
 # define PAEA_R_RANDOM_FAILED                       121
 # define PAEA_R_SIGN_FAILED                         107
@@ -46,7 +37,6 @@
 # define PAEA_R_USER_REVOKED                        119
 # define PAEA_R_VERIFY_FAILED                       108
 # define PAEA_R_WITNESS_INVALID                     118
-# define PAEA_R_WRONG_MECHANISM                     101
 
 # endif /* OPENSSL_NO_PAEA */
 #endif

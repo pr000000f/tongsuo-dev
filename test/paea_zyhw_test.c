@@ -14,31 +14,19 @@
  */
 
 /*
- * ZYHW (GB/T 34953.4-XXXX 7.3) integration tests:
+ * ZYHW (GB/T 34953.4-XXXX 7.3) integration tests.
  *
- *   - full registration + anonymous authentication (with and without
- *     the optional revocation bookkeeping)
- *   - session key agreement on both sides
- *   - wrong password is rejected by the server (REJECT)
- *   - tampered proof messages are rejected
- *   - user revocation: stale witnesses stop working, witnesses refreshed
- *     with the updated CRL work again
- *   - the group is configurable: the whole flow runs on SM2/SM3 as well
- *     as on P-256/SHA-256
- *   - server key persistence (params + servkey + crl) and user credential
- *     persistence survive a context round trip
+ * The library has no context object.  This file keeps a party struct only
+ * so a test can hold the group, keys, accumulator and CRL together.
  */
 
 #include "testutil.h"
-#include <stdio.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
 #include <openssl/core_names.h>
-#include <openssl/param_build.h>
 #include <openssl/params.h>
 #include <openssl/paea.h>
-#include <openssl/paeaerr.h>
 
-/* mechanism configuration used by most tests */
 typedef struct zh_conf_st {
     const char *group;
     const char *digest;
@@ -46,6 +34,32 @@ typedef struct zh_conf_st {
     const char *sig_digest;     /* NULL == scheme default */
     int revocation;
 } ZH_CONF;
+
+/* Test-local holder.  Not a library type. */
+typedef struct zh_party_st {
+    EC_GROUP *group;
+    EVP_MD *md;
+    EVP_MD *sig_md;
+    char *digest_name;
+    char *sig_type;
+    char *sig_digest_name;
+    EVP_PKEY *sig_key;
+    EC_POINT *w;
+    int revocation;
+    EC_POINT *acc;
+    BIGNUM *r;
+    PAEA_CRL_ENTRY *crl;
+    size_t crl_len;
+    size_t crl_alloc;
+    BIGNUM *m;
+    EC_POINT *sigma_pw;
+    EC_POINT *witness;
+    uint32_t witness_idx;
+    BIGNUM *y;
+    EC_POINT *y_pt;
+    unsigned char *sigma_s;
+    size_t sigma_s_len;
+} ZH_PARTY;
 
 static const ZH_CONF conf_sm2 = {
     "SM2", "SM3", "SM2", NULL, 1
@@ -57,316 +71,246 @@ static const ZH_CONF conf_norev = {
     "SM2", "SM3", "SM2", NULL, 0
 };
 
-static EVP_PAEA_CTX *zh_new_ctx(void)
+static void zh_clear_session(ZH_PARTY *p)
 {
-    return EVP_PAEA_CTX_new(NULL, NULL);
+    BN_clear_free(p->y);
+    p->y = NULL;
+    EC_POINT_free(p->y_pt);
+    p->y_pt = NULL;
+    OPENSSL_clear_free(p->sigma_s, p->sigma_s_len);
+    p->sigma_s = NULL;
+    p->sigma_s_len = 0;
 }
 
-static int zh_apply_conf(EVP_PAEA_CTX *ctx, const ZH_CONF *conf)
+static void zh_free(ZH_PARTY *p)
 {
-    OSSL_PARAM_BLD *bld = OSSL_PARAM_BLD_new();
-    OSSL_PARAM *params = NULL;
-    int ok = 0;
-
-    if (bld == NULL)
-        goto end;
-    if (!OSSL_PARAM_BLD_push_int(bld, OSSL_PAEA_PARAM_MECHANISM,
-                                 NID_zyhw_mechanism)
-            || !OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PAEA_PARAM_GROUP,
-                                               conf->group, 0)
-            || !OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PAEA_PARAM_DIGEST,
-                                                conf->digest, 0)
-            || !OSSL_PARAM_BLD_push_utf8_string(bld, OSSL_PAEA_PARAM_SIGNATURE,
-                                                conf->signature, 0)
-            || !OSSL_PARAM_BLD_push_int(bld, OSSL_PAEA_PARAM_REVOCATION,
-                                        conf->revocation))
-        goto end;
-    if (conf->sig_digest != NULL
-            && OSSL_PARAM_BLD_push_utf8_string(bld,
-                                              OSSL_PAEA_PARAM_SIG_DIGEST,
-                                              conf->sig_digest, 0) != 1)
-        goto end;
-    params = OSSL_PARAM_BLD_to_param(bld);
-    if (params == NULL)
-        goto end;
-    ok = EVP_PAEA_CTX_set_params(ctx, params);
-
- end:
-    OSSL_PARAM_free(params);
-    OSSL_PARAM_BLD_free(bld);
-    return ok;
+    if (p == NULL)
+        return;
+    zh_clear_session(p);
+    EC_GROUP_free(p->group);
+    EVP_MD_free(p->md);
+    EVP_MD_free(p->sig_md);
+    OPENSSL_free(p->digest_name);
+    OPENSSL_free(p->sig_type);
+    OPENSSL_free(p->sig_digest_name);
+    EVP_PKEY_free(p->sig_key);
+    EC_POINT_free(p->w);
+    EC_POINT_free(p->acc);
+    BN_clear_free(p->r);
+    paea_crl_entries_free(p->crl, p->crl_len);
+    BN_clear_free(p->m);
+    EC_POINT_clear_free(p->sigma_pw);
+    EC_POINT_clear_free(p->witness);
+    OPENSSL_free(p);
 }
 
-static int zh_set_blob(EVP_PAEA_CTX *ctx, const char *key,
-                       const unsigned char *blob, size_t blob_len)
+/* B_n is the last CRL entry, or g when the list is empty. */
+static int zh_set_acc(ZH_PARTY *p)
 {
-    OSSL_PARAM_BLD *bld = OSSL_PARAM_BLD_new();
-    OSSL_PARAM *params = NULL;
-    int ok = 0;
+    const EC_POINT *src;
 
-    if (bld == NULL)
-        goto end;
-    if (OSSL_PARAM_BLD_push_octet_string(bld, key, blob, blob_len) != 1)
-        goto end;
-    params = OSSL_PARAM_BLD_to_param(bld);
-    if (params == NULL)
-        goto end;
-    ok = EVP_PAEA_CTX_set_params(ctx, params);
-
- end:
-    OSSL_PARAM_free(params);
-    OSSL_PARAM_BLD_free(bld);
-    return ok;
+    if (!p->revocation)
+        return 1;
+    EC_POINT_free(p->acc);
+    p->acc = EC_POINT_new(p->group);
+    if (p->acc == NULL)
+        return 0;
+    src = p->crl_len == 0 ? EC_GROUP_get0_generator(p->group)
+                          : p->crl[p->crl_len - 1].b;
+    return EC_POINT_copy(p->acc, src) == 1;
 }
 
-static unsigned char *zh_get_blob(EVP_PAEA_CTX *ctx, const char *key,
-                                  size_t *out_len)
+static int zh_fetch_md(ZH_PARTY *p)
+{
+    EVP_MD_free(p->md);
+    EVP_MD_free(p->sig_md);
+    p->md = EVP_MD_fetch(NULL, p->digest_name, NULL);
+    p->sig_md = EVP_MD_fetch(NULL, p->sig_digest_name, NULL);
+    return p->md != NULL && p->sig_md != NULL;
+}
+
+static EC_GROUP *zh_group(const char *name)
 {
     OSSL_PARAM params[2];
-    unsigned char *buf = NULL;
 
-    *out_len = 0;
-    params[0] = OSSL_PARAM_construct_octet_string(key, NULL, 0);
+    params[0] = OSSL_PARAM_construct_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME,
+                                                 (char *)name, 0);
     params[1] = OSSL_PARAM_construct_end();
-    if (!EVP_PAEA_CTX_get_params(ctx, params))
-        return NULL;
-    if (params[0].return_size == 0)
-        return NULL;
-    buf = OPENSSL_malloc(params[0].return_size);
-    if (buf == NULL)
-        return NULL;
-    params[0] = OSSL_PARAM_construct_octet_string(key, buf,
-                                                  params[0].return_size);
-    if (!EVP_PAEA_CTX_get_params(ctx, params)) {
-        OPENSSL_free(buf);
-        return NULL;
-    }
-    *out_len = params[0].return_size;
-    return buf;
+    return EC_GROUP_new_from_params(params, NULL, NULL);
 }
 
-static unsigned char *zh_issued(EVP_PAEA_CTX *sctx,
-                                const unsigned char *uid, size_t uid_len,
-                                size_t *out_len)
+static ZH_PARTY *zh_server_of(const ZH_CONF *conf)
 {
-    size_t len = 0;
-    unsigned char *buf;
+    ZH_PARTY *p = OPENSSL_zalloc(sizeof(*p));
 
-    if (!EVP_PAEA_server_issue_credential(sctx, uid, uid_len, NULL, &len))
+    if (p == NULL)
         return NULL;
-    buf = OPENSSL_malloc(len);
-    if (buf == NULL)
-        return NULL;
-    *out_len = len;
-    if (!EVP_PAEA_server_issue_credential(sctx, uid, uid_len, buf, out_len)) {
-        OPENSSL_free(buf);
-        return NULL;
-    }
-    return buf;
+    p->revocation = conf->revocation;
+    p->group = zh_group(conf->group);
+    p->digest_name = OPENSSL_strdup(conf->digest);
+    p->sig_type = OPENSSL_strdup(conf->signature);
+    p->md = EVP_MD_fetch(NULL, conf->digest, NULL);
+    if (p->group == NULL || p->digest_name == NULL || p->sig_type == NULL
+        || p->md == NULL
+        || !paea_zyhw_setup(p->group, conf->signature, conf->sig_digest, NULL,
+                            NULL, NULL, conf->revocation,
+                            &p->r, &p->w, &p->acc, &p->sig_key,
+                            &p->sig_digest_name))
+        goto err;
+    p->sig_md = EVP_MD_fetch(NULL, p->sig_digest_name, NULL);
+    if (p->sig_md == NULL)
+        goto err;
+    return p;
+
+ err:
+    zh_free(p);
+    return NULL;
 }
 
-/*
- * One anonymous authentication run.  Returns 1 (ACCEPT from both sides,
- * matching session keys) or 0 (anything fails).  sk_out may be NULL.
- */
-static int zh_auth_once(EVP_PAEA_CTX *sctx, EVP_PAEA_CTX *uctx,
-                        const unsigned char *pw, size_t pw_len,
-                        unsigned char *sk_out, size_t *sk_len_out)
+/* The user already holds the public parameters: curve, names, w, and
+ * the server signature key.  CRL updates still travel as a blob. */
+static int zh_copy_public(ZH_PARTY *dst, const ZH_PARTY *src)
+{
+    dst->revocation = src->revocation;
+    dst->group = EC_GROUP_dup(src->group);
+    dst->digest_name = OPENSSL_strdup(src->digest_name);
+    dst->sig_type = OPENSSL_strdup(src->sig_type);
+    dst->sig_digest_name = OPENSSL_strdup(src->sig_digest_name);
+    dst->w = EC_POINT_dup(src->w, dst->group);
+    if (dst->group == NULL || dst->digest_name == NULL
+        || dst->sig_type == NULL || dst->sig_digest_name == NULL
+        || dst->w == NULL || !EVP_PKEY_up_ref(src->sig_key))
+        return 0;
+    dst->sig_key = src->sig_key;
+    return zh_fetch_md(dst);
+}
+
+static int zh_replace_crl(ZH_PARTY *p, const unsigned char *blob, size_t len)
+{
+    PAEA_CRL_ENTRY *crl = NULL;
+    size_t n = 0;
+
+    if (!paea_decode_crl_blob(p->group, blob, len, &crl, &n))
+        return 0;
+    paea_crl_entries_free(p->crl, p->crl_len);
+    p->crl = crl;
+    p->crl_len = n;
+    p->crl_alloc = n;
+    return zh_set_acc(p);
+}
+
+static int zh_make_user(ZH_PARTY *srv, const unsigned char *uid, size_t uid_len,
+                        const unsigned char *pw, size_t pw_len, ZH_PARTY **out)
+{
+    unsigned char *crl = NULL, *issued = NULL;
+    size_t crl_len = 0, issued_len = 0;
+    ZH_PARTY *u = NULL;
+    int ret = 0;
+
+    *out = NULL;
+    u = OPENSSL_zalloc(sizeof(*u));
+    if (u == NULL || !zh_copy_public(u, srv))
+        goto end;
+    if (srv->revocation
+        && (!paea_encode_crl_blob(srv->group, srv->crl, srv->crl_len,
+                                  &crl, &crl_len)
+            || !zh_replace_crl(u, crl, crl_len)))
+        goto end;
+    if (!paea_zyhw_issue_credential(srv->group, srv->md, srv->r,
+                                    srv->revocation ? srv->acc : NULL,
+                                    srv->crl_len, uid, uid_len,
+                                    &issued, &issued_len))
+        goto end;
+    if (!paea_zyhw_wrap_credential(u->group, u->md, uid, uid_len, pw, pw_len,
+                                   issued, issued_len, u->revocation,
+                                   &u->m, &u->sigma_pw, &u->witness,
+                                   &u->witness_idx))
+        goto end;
+    *out = u;
+    u = NULL;
+    ret = 1;
+
+ end:
+    OPENSSL_free(crl);
+    OPENSSL_free(issued);
+    zh_free(u);
+    return ret;
+}
+
+static int zh_auth_init(ZH_PARTY *srv, unsigned char **msg, size_t *msg_len)
+{
+    zh_clear_session(srv);
+    return paea_zyhw_server_auth_init(srv->group, srv->sig_key, srv->sig_md,
+                                      msg, msg_len, &srv->y, &srv->y_pt,
+                                      &srv->sigma_s, &srv->sigma_s_len);
+}
+
+static int zh_auth_once(ZH_PARTY *srv, ZH_PARTY *usr,
+                        const unsigned char *pw, size_t pw_len)
 {
     unsigned char *msg1 = NULL, *msg2 = NULL, *sk_u = NULL, *sk_s = NULL;
     size_t msg1_len = 0, msg2_len = 0, sku_len = 0, sks_len = 0;
     int ret = 0;
 
-    /*
-     * Every auth_init call produces a fresh randomly signed message: the
-     * DER signature length varies a byte or two between calls, so never
-     * use the size-probe-then-write pattern here.  512 bytes comfortably
-     * cover TL(Y)+TL(sigma_S) on all supported curves.
-     */
-    msg1 = OPENSSL_malloc(512);
-    if (msg1 == NULL)
+    if (!zh_auth_init(srv, &msg1, &msg1_len)
+        || !paea_zyhw_user_prove(usr->group, usr->md, usr->sigma_pw, usr->m,
+                                 usr->sig_key,
+                                 usr->revocation ? usr->witness : NULL,
+                                 usr->revocation ? usr->acc : NULL,
+                                 pw, pw_len, msg1, msg1_len,
+                                 &msg2, &msg2_len, &sk_u, &sku_len)
+        || paea_zyhw_server_verify(srv->group, srv->md, srv->r, srv->y,
+                                   srv->y_pt, srv->sigma_s, srv->sigma_s_len,
+                                   srv->revocation ? srv->acc : NULL,
+                                   msg2, msg2_len, &sk_s, &sks_len) != 1
+        || sku_len != sks_len || memcmp(sk_u, sk_s, sku_len) != 0)
         goto end;
-    msg1_len = 512;
-    ERR_clear_error();
-    if (!EVP_PAEA_server_auth_init(sctx, msg1, &msg1_len)) {
-        fprintf(stderr, "AUX: auth_init failed\n");
-        ERR_print_errors_fp(stderr);
-        goto end;
-    }
-
-    /* sigma_U is at most 3 points + 4 integers (with TL prefixes),
-     * ~350 bytes on P-521; 1024 is generous for all groups. */
-    msg2 = OPENSSL_malloc(1024);
-    if (msg2 == NULL)
-        goto end;
-    msg2_len = 1024;
-    ERR_clear_error();
-    if (!EVP_PAEA_user_auth_prove(uctx, pw, pw_len, msg1, msg1_len,
-                                  msg2, &msg2_len)) {
-        fprintf(stderr, "AUX: user prove failed\n");
-        ERR_print_errors_fp(stderr);
-        goto end;
-    }
-
-    ERR_clear_error();
-    if (EVP_PAEA_server_auth_verify(sctx, msg2, msg2_len) != 1) {
-        fprintf(stderr, "AUX: server verify REJECTED msg2 (%zu bytes)\n",
-                msg2_len);
-        ERR_print_errors_fp(stderr);
-        goto end;
-    }
-
-    if (!EVP_PAEA_CTX_get_session_key(uctx, NULL, &sku_len)) {
-        fprintf(stderr, "AUX: user sk get (sizing) failed\n");
-        ERR_print_errors_fp(stderr);
-        goto end;
-    }
-    sk_u = OPENSSL_malloc(sku_len);
-    if (sk_u == NULL)
-        goto end;
-    if (!EVP_PAEA_CTX_get_session_key(uctx, sk_u, &sku_len)) {
-        fprintf(stderr, "AUX: user sk get failed\n");
-        ERR_print_errors_fp(stderr);
-        goto end;
-    }
-    if (!EVP_PAEA_CTX_get_session_key(sctx, NULL, &sks_len)) {
-        fprintf(stderr, "AUX: server sk get (sizing) failed\n");
-        ERR_print_errors_fp(stderr);
-        goto end;
-    }
-    sk_s = OPENSSL_malloc(sks_len);
-    if (sk_s == NULL)
-        goto end;
-    if (!EVP_PAEA_CTX_get_session_key(sctx, sk_s, &sks_len)) {
-        fprintf(stderr, "AUX: server sk get failed\n");
-        ERR_print_errors_fp(stderr);
-        goto end;
-    }
-
-    if (sku_len != sks_len || memcmp(sk_u, sk_s, sku_len) != 0) {
-        size_t i;
-
-        fprintf(stderr, "AUX: SK mismatch! user len=%zu server len=%zu\n",
-                sku_len, sks_len);
-        if (sku_len == sks_len) {
-            for (i = 0; i < sku_len && sk_u[i] == sk_s[i]; i++)
-                ;
-            fprintf(stderr, "AUX: first differing byte at %zu\n", i);
-        }
-        goto end;
-    }
-
-    if (sk_out != NULL && sk_len_out != NULL) {
-        if (*sk_len_out < sku_len) {
-            *sk_len_out = sku_len;
-            goto end;
-        }
-        memcpy(sk_out, sk_u, sku_len);
-        *sk_len_out = sku_len;
-    }
     ret = 1;
 
  end:
+    ERR_clear_error();
     OPENSSL_free(msg1);
     OPENSSL_free(msg2);
-    OPENSSL_free(sk_u);
-    OPENSSL_free(sk_s);
+    OPENSSL_clear_free(sk_u, sku_len);
+    OPENSSL_clear_free(sk_s, sks_len);
     return ret;
 }
 
-/*
- * Wire up a fresh user context from the current server context state
- * (params blob, crl, credential), shared by most of the tests below.
- */
-static int zh_make_user(EVP_PAEA_CTX *sctx, const ZH_CONF *conf,
-                        const unsigned char *uid, size_t uid_len,
-                        const unsigned char *pw, size_t pw_len,
-                        EVP_PAEA_CTX **out_uctx)
+static int zh_revoke(ZH_PARTY *srv, const unsigned char *uid, size_t uid_len)
 {
-    unsigned char *params_blob = NULL, *issued = NULL, *crl = NULL;
-    size_t params_len = 0, issued_len = 0, crl_len = 0;
-    EVP_PAEA_CTX *uctx = NULL;
-    int ret = 0;
+    BIGNUM *m = BN_new();
+    int ok;
 
-    *out_uctx = NULL;
-
-    params_blob = zh_get_blob(sctx, OSSL_PAEA_PARAM_PARAMS, &params_len);
-    if (params_blob == NULL)
-        goto end;
-    issued = zh_issued(sctx, uid, uid_len, &issued_len);
-    if (issued == NULL)
-        goto end;
-
-    uctx = zh_new_ctx();
-    if (uctx == NULL)
-        goto end;
-    if (conf->revocation) {
-        /* the params blob already carries the CRL, yet exercise the
-         * standalone "crl" import the way deployments will refresh it */
-        crl = zh_get_blob(sctx, OSSL_PAEA_PARAM_CRL, &crl_len);
-        if (crl == NULL)
-            goto end;
+    if (m == NULL || !paea_m_of_uid(srv->md, srv->group, uid, uid_len, m)) {
+        BN_clear_free(m);
+        return 0;
     }
-    if (!zh_apply_conf(uctx, conf))
-        goto end;
-    if (conf->revocation
-            && !zh_set_blob(uctx, OSSL_PAEA_PARAM_CRL, crl, crl_len))
-        goto end;
-    if (!zh_set_blob(uctx, OSSL_PAEA_PARAM_PARAMS, params_blob, params_len))
-        goto end;
-    if (!EVP_PAEA_user_store_credential(uctx, uid, uid_len, pw, pw_len,
-                                        issued, issued_len))
-        goto end;
-
-    *out_uctx = uctx;
-    uctx = NULL;
-    ret = 1;
-
- end:
-    OPENSSL_free(params_blob);
-    OPENSSL_free(issued);
-    OPENSSL_free(crl);
-    EVP_PAEA_CTX_free(uctx);
-    return ret;
+    ok = paea_crl_revoke(srv->group, srv->r, &srv->acc,
+                         &srv->crl, &srv->crl_len, &srv->crl_alloc, m);
+    BN_clear_free(m);
+    return ok;
 }
 
-static EVP_PAEA_CTX *zh_server_of(const ZH_CONF *conf)
-{
-    EVP_PAEA_CTX *sctx = zh_new_ctx();
-
-    if (sctx == NULL)
-        return NULL;
-    if (!zh_apply_conf(sctx, conf) || !EVP_PAEA_setup(sctx)) {
-        EVP_PAEA_CTX_free(sctx);
-        return NULL;
-    }
-    return sctx;
-}
-
-/* ------------------------------------------------------------------ */
-/* tests                                                               */
 /* ------------------------------------------------------------------ */
 
 static int test_zh_basic(void)
 {
     static const unsigned char uid[] = "user@example.com";
     static const unsigned char pw[] = "correct horse battery staple";
-    EVP_PAEA_CTX *sctx = NULL, *uctx = NULL;
+    ZH_PARTY *srv = NULL, *usr = NULL;
 
-    if (!TEST_ptr(sctx = zh_server_of(&conf_norev))
-            || !TEST_true(zh_make_user(sctx, &conf_norev, uid, sizeof(uid) - 1,
-                                       pw, sizeof(pw) - 1, &uctx)))
+    if (!TEST_ptr(srv = zh_server_of(&conf_norev))
+            || !TEST_true(zh_make_user(srv, uid, sizeof(uid) - 1,
+                                       pw, sizeof(pw) - 1, &usr))
+            || !TEST_true(zh_auth_once(srv, usr, pw, sizeof(pw) - 1)))
         goto err;
-    if (!TEST_true(zh_auth_once(sctx, uctx, pw, sizeof(pw) - 1, NULL, NULL)))
-        goto err;
-
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
+    zh_free(srv);
+    zh_free(usr);
     return 1;
 
  err:
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
+    zh_free(srv);
+    zh_free(usr);
     return 0;
 }
 
@@ -374,33 +318,30 @@ static int test_zh_curves(void)
 {
     static const unsigned char uid[] = "curve-user-1";
     static const unsigned char pw[] = "hunter2!";
-    EVP_PAEA_CTX *sctx = NULL, *uctx = NULL;
+    ZH_PARTY *srv = NULL, *usr = NULL;
 
-    if (!TEST_ptr(sctx = zh_server_of(&conf_sm2))
-            || !TEST_true(zh_make_user(sctx, &conf_sm2, uid, sizeof(uid) - 1,
-                                       pw, sizeof(pw) - 1, &uctx))
-            || !TEST_true(zh_auth_once(sctx, uctx, pw, sizeof(pw) - 1,
-                                       NULL, NULL)))
+    if (!TEST_ptr(srv = zh_server_of(&conf_sm2))
+            || !TEST_true(zh_make_user(srv, uid, sizeof(uid) - 1,
+                                       pw, sizeof(pw) - 1, &usr))
+            || !TEST_true(zh_auth_once(srv, usr, pw, sizeof(pw) - 1)))
         goto err;
+    zh_free(srv);
+    zh_free(usr);
+    srv = NULL;
+    usr = NULL;
 
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
-
-    /* second curve: P-256 with ECDSA/SHA256 signatures */
-    if (!TEST_ptr(sctx = zh_server_of(&conf_p256))
-            || !TEST_true(zh_make_user(sctx, &conf_p256, uid, sizeof(uid) - 1,
-                                       pw, sizeof(pw) - 1, &uctx))
-            || !TEST_true(zh_auth_once(sctx, uctx, pw, sizeof(pw) - 1,
-                                       NULL, NULL)))
+    if (!TEST_ptr(srv = zh_server_of(&conf_p256))
+            || !TEST_true(zh_make_user(srv, uid, sizeof(uid) - 1,
+                                       pw, sizeof(pw) - 1, &usr))
+            || !TEST_true(zh_auth_once(srv, usr, pw, sizeof(pw) - 1)))
         goto err;
-
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
+    zh_free(srv);
+    zh_free(usr);
     return 1;
 
  err:
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
+    zh_free(srv);
+    zh_free(usr);
     return 0;
 }
 
@@ -409,46 +350,38 @@ static int test_zh_wrong_password(void)
     static const unsigned char uid[] = "user@example.com";
     static const unsigned char pw[] = "right-password";
     static const unsigned char bad[] = "wrong-password";
-    EVP_PAEA_CTX *sctx = NULL, *uctx = NULL;
+    ZH_PARTY *srv = NULL, *usr = NULL;
     unsigned char *msg1 = NULL, *msg2 = NULL;
     size_t msg1_len = 0, msg2_len = 0;
 
-    if (!TEST_ptr(sctx = zh_server_of(&conf_sm2))
-            || !TEST_true(zh_make_user(sctx, &conf_sm2, uid, sizeof(uid) - 1,
-                                       pw, sizeof(pw) - 1, &uctx)))
+    if (!TEST_ptr(srv = zh_server_of(&conf_sm2))
+            || !TEST_true(zh_make_user(srv, uid, sizeof(uid) - 1,
+                                       pw, sizeof(pw) - 1, &usr)))
         goto err;
-
-    /* see zh_auth_once(): fresh random signature on every call, so use
-     * a fixed generous buffer instead of size-probe-then-write */
-    msg1 = OPENSSL_malloc(512);
-    if (msg1 == NULL)
+    if (!zh_auth_init(srv, &msg1, &msg1_len))
         goto err;
-    msg1_len = 512;
-    if (!EVP_PAEA_server_auth_init(sctx, msg1, &msg1_len))
+    if (!paea_zyhw_user_prove(usr->group, usr->md, usr->sigma_pw, usr->m,
+                              usr->sig_key, usr->witness, usr->acc,
+                              bad, sizeof(bad) - 1, msg1, msg1_len,
+                              &msg2, &msg2_len, NULL, NULL))
         goto err;
-    /* proving with the wrong password produces a proof the server
-     * rejects (the honest user cannot tell locally!) */
-    msg2 = OPENSSL_malloc(1024);
-    if (msg2 == NULL)
+    if (!TEST_false(paea_zyhw_server_verify(srv->group, srv->md, srv->r,
+                                            srv->y, srv->y_pt,
+                                            srv->sigma_s, srv->sigma_s_len,
+                                            srv->acc, msg2, msg2_len,
+                                            NULL, NULL)))
         goto err;
-    msg2_len = 1024;
-    if (!EVP_PAEA_user_auth_prove(uctx, bad, sizeof(bad) - 1,
-                                  msg1, msg1_len, msg2, &msg2_len))
-        goto err;
-    if (!TEST_false(EVP_PAEA_server_auth_verify(sctx, msg2, msg2_len)))
-        goto err;
-
     OPENSSL_free(msg1);
     OPENSSL_free(msg2);
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
+    zh_free(srv);
+    zh_free(usr);
     return 1;
 
  err:
     OPENSSL_free(msg1);
     OPENSSL_free(msg2);
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
+    zh_free(srv);
+    zh_free(usr);
     return 0;
 }
 
@@ -456,50 +389,48 @@ static int test_zh_tampered_message(void)
 {
     static const unsigned char uid[] = "user@example.com";
     static const unsigned char pw[] = "right-password";
-    EVP_PAEA_CTX *sctx = NULL, *uctx = NULL;
+    ZH_PARTY *srv = NULL, *usr = NULL;
     unsigned char *msg1 = NULL, *msg2 = NULL;
     size_t msg1_len = 0, msg2_len = 0;
 
-    if (!TEST_ptr(sctx = zh_server_of(&conf_sm2))
-            || !TEST_true(zh_make_user(sctx, &conf_sm2, uid, sizeof(uid) - 1,
-                                       pw, sizeof(pw) - 1, &uctx)))
+    if (!TEST_ptr(srv = zh_server_of(&conf_sm2))
+            || !TEST_true(zh_make_user(srv, uid, sizeof(uid) - 1,
+                                       pw, sizeof(pw) - 1, &usr)))
         goto err;
-    /* see zh_auth_once(): fixed generous buffers, no size probing */
-    msg1 = OPENSSL_malloc(512);
-    if (msg1 == NULL)
+    if (!zh_auth_init(srv, &msg1, &msg1_len))
         goto err;
-    msg1_len = 512;
-    if (!EVP_PAEA_server_auth_init(sctx, msg1, &msg1_len))
-        goto err;
-    msg2 = OPENSSL_malloc(1024);
-    if (msg2 == NULL)
-        goto err;
-    msg2_len = 1024;
-    if (!EVP_PAEA_user_auth_prove(uctx, pw, sizeof(pw) - 1,
-                                  msg1, msg1_len, msg2, &msg2_len))
+    if (!paea_zyhw_user_prove(usr->group, usr->md, usr->sigma_pw, usr->m,
+                              usr->sig_key, usr->witness, usr->acc,
+                              pw, sizeof(pw) - 1, msg1, msg1_len,
+                              &msg2, &msg2_len, NULL, NULL))
         goto err;
 
-    /* flip a byte inside the middle of sigma_U and make sure the
-     * verification equation falls apart */
     msg2[msg2_len / 2] ^= 0x01;
-    if (!TEST_false(EVP_PAEA_server_auth_verify(sctx, msg2, msg2_len)))
+    if (!TEST_false(paea_zyhw_server_verify(srv->group, srv->md, srv->r,
+                                            srv->y, srv->y_pt,
+                                            srv->sigma_s, srv->sigma_s_len,
+                                            srv->acc, msg2, msg2_len,
+                                            NULL, NULL)))
         goto err;
-    /* restore, and truncate the message */
     msg2[msg2_len / 2] ^= 0x01;
-    if (!TEST_false(EVP_PAEA_server_auth_verify(sctx, msg2, msg2_len - 1)))
+    if (!TEST_false(paea_zyhw_server_verify(srv->group, srv->md, srv->r,
+                                            srv->y, srv->y_pt,
+                                            srv->sigma_s, srv->sigma_s_len,
+                                            srv->acc, msg2, msg2_len - 1,
+                                            NULL, NULL)))
         goto err;
 
     OPENSSL_free(msg1);
     OPENSSL_free(msg2);
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
+    zh_free(srv);
+    zh_free(usr);
     return 1;
 
  err:
     OPENSSL_free(msg1);
     OPENSSL_free(msg2);
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
+    zh_free(srv);
+    zh_free(usr);
     return 0;
 }
 
@@ -508,140 +439,54 @@ static int test_zh_revocation(void)
     static const unsigned char uid1[] = "user-one";
     static const unsigned char uid2[] = "user-two";
     static const unsigned char pw[] = "-shared-password";
-    EVP_PAEA_CTX *sctx = NULL, *u1 = NULL, *u2 = NULL;
+    ZH_PARTY *srv = NULL, *u1 = NULL, *u2 = NULL;
     unsigned char *crl = NULL;
     size_t crl_len = 0;
 
-    if (!TEST_ptr(sctx = zh_server_of(&conf_sm2))
-            || !TEST_true(zh_make_user(sctx, &conf_sm2,
-                                       uid1, sizeof(uid1) - 1,
+    if (!TEST_ptr(srv = zh_server_of(&conf_sm2))
+            || !TEST_true(zh_make_user(srv, uid1, sizeof(uid1) - 1,
                                        pw, sizeof(pw) - 1, &u1))
-            || !TEST_true(zh_make_user(sctx, &conf_sm2,
-                                       uid2, sizeof(uid2) - 1,
+            || !TEST_true(zh_make_user(srv, uid2, sizeof(uid2) - 1,
                                        pw, sizeof(pw) - 1, &u2))
-            || !TEST_true(zh_auth_once(sctx, u1, pw, sizeof(pw) - 1,
-                                       NULL, NULL))
-            || !TEST_true(zh_auth_once(sctx, u2, pw, sizeof(pw) - 1,
-                                       NULL, NULL)))
+            || !TEST_true(zh_auth_once(srv, u1, pw, sizeof(pw) - 1))
+            || !TEST_true(zh_auth_once(srv, u2, pw, sizeof(pw) - 1)))
         goto err;
 
-    /* revoke uid1: their stale witness must stop working, uid2 keeps
-     * authenticating after refreshing against the new CRL */
-    if (!TEST_true(EVP_PAEA_server_revoke(sctx, uid1, sizeof(uid1) - 1)))
+    if (!TEST_true(zh_revoke(srv, uid1, sizeof(uid1) - 1)))
         goto err;
-    if (!TEST_false(zh_auth_once(sctx, u1, pw, sizeof(pw) - 1, NULL, NULL)))
+    if (!TEST_false(zh_auth_once(srv, u1, pw, sizeof(pw) - 1)))
         goto err;
 
-    crl = zh_get_blob(sctx, OSSL_PAEA_PARAM_CRL, &crl_len);
-    if (!TEST_ptr(crl))
-        goto err;
-    if (!TEST_true(zh_set_blob(u2, OSSL_PAEA_PARAM_CRL, crl, crl_len))
-            || !TEST_true(EVP_PAEA_user_update_witness(u2))
-            || !TEST_true(zh_auth_once(sctx, u2, pw, sizeof(pw) - 1,
-                                       NULL, NULL)))
+    if (!TEST_true(paea_encode_crl_blob(srv->group, srv->crl, srv->crl_len,
+                                        &crl, &crl_len))
+            || !TEST_true(zh_replace_crl(u2, crl, crl_len))
+            || !TEST_true(paea_zyhw_update_witness(u2->group, u2->m,
+                                                   u2->witness,
+                                                   &u2->witness_idx,
+                                                   u2->crl, u2->crl_len))
+            || !TEST_true(zh_auth_once(srv, u2, pw, sizeof(pw) - 1)))
         goto err;
 
-    /* a user that freshly registers after a revocation event gets a
-     * witness matching the current CRL, immediately usable */
-    if (!TEST_true(zh_set_blob(u1, OSSL_PAEA_PARAM_CRL, crl, crl_len)))
+    if (!TEST_true(zh_replace_crl(u1, crl, crl_len)))
         goto err;
-    /* uid1 stays revoked: refresh detectable by the USER_REVOKED reason,
-     * updating then keeps failing the auth until re-registration */
-    if (!TEST_false(EVP_PAEA_user_update_witness(u1))) {
-        /* accepting would be a protocol error; failing here is expected */
+    if (!TEST_false(paea_zyhw_update_witness(u1->group, u1->m, u1->witness,
+                                             &u1->witness_idx,
+                                             u1->crl, u1->crl_len)))
         goto err;
-    }
-
-    /* double revocation must be rejected */
-    if (!TEST_false(EVP_PAEA_server_revoke(sctx, uid1, sizeof(uid1) - 1)))
+    if (!TEST_false(zh_revoke(srv, uid1, sizeof(uid1) - 1)))
         goto err;
 
     OPENSSL_free(crl);
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(u1);
-    EVP_PAEA_CTX_free(u2);
+    zh_free(srv);
+    zh_free(u1);
+    zh_free(u2);
     return 1;
 
  err:
     OPENSSL_free(crl);
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(u1);
-    EVP_PAEA_CTX_free(u2);
-    return 0;
-}
-
-static int test_zh_persistence(void)
-{
-    static const unsigned char uid[] = "persistent-user";
-    static const unsigned char pw[] = "persistent-password";
-    EVP_PAEA_CTX *sctx = NULL, *uctx = NULL;
-    unsigned char *params_blob = NULL, *servkey = NULL, *crl = NULL;
-    unsigned char *cred = NULL;
-    size_t params_len = 0, servkey_len = 0, crl_len = 0, cred_len = 0;
-    EVP_PAEA_CTX *sctx2 = NULL, *uctx2 = NULL;
-
-    if (!TEST_ptr(sctx = zh_server_of(&conf_sm2))
-            || !TEST_true(zh_make_user(sctx, &conf_sm2, uid, sizeof(uid) - 1,
-                                       pw, sizeof(pw) - 1, &uctx))
-            || !TEST_true(zh_auth_once(sctx, uctx, pw, sizeof(pw) - 1,
-                                       NULL, NULL)))
-        goto err;
-
-    params_blob = zh_get_blob(sctx, OSSL_PAEA_PARAM_PARAMS, &params_len);
-    servkey = zh_get_blob(sctx, OSSL_PAEA_PARAM_SERVKEY, &servkey_len);
-    if (conf_sm2.revocation)
-        crl = zh_get_blob(sctx, OSSL_PAEA_PARAM_CRL, &crl_len);
-    cred = zh_get_blob(uctx, OSSL_PAEA_PARAM_CREDENTIAL, &cred_len);
-    if (!TEST_ptr(params_blob) || !TEST_ptr(servkey) || !TEST_ptr(cred))
-        goto err;
-
-    /* fresh user context from the persisted credential ("user restart") */
-    uctx2 = zh_new_ctx();
-    if (!TEST_ptr(uctx2)
-            || !TEST_true(zh_apply_conf(uctx2, &conf_sm2))
-            || !TEST_true(zh_set_blob(uctx2, OSSL_PAEA_PARAM_CRL,
-                                      crl, crl_len))
-            || !TEST_true(zh_set_blob(uctx2, OSSL_PAEA_PARAM_PARAMS,
-                                      params_blob, params_len))
-            || !TEST_true(zh_set_blob(uctx2, OSSL_PAEA_PARAM_CREDENTIAL,
-                                      cred, cred_len))
-            || !TEST_true(zh_auth_once(sctx, uctx2, pw, sizeof(pw) - 1,
-                                       NULL, NULL)))
-        goto err;
-
-    /* restored server context drives a full authentication */
-    sctx2 = zh_new_ctx();
-    if (!TEST_ptr(sctx2)
-            || !TEST_true(zh_apply_conf(sctx2, &conf_sm2))
-            || !TEST_true(zh_set_blob(sctx2, OSSL_PAEA_PARAM_CRL,
-                                      crl, crl_len))
-            || !TEST_true(zh_set_blob(sctx2, OSSL_PAEA_PARAM_PARAMS,
-                                      params_blob, params_len))
-            || !TEST_true(zh_set_blob(sctx2, OSSL_PAEA_PARAM_SERVKEY,
-                                      servkey, servkey_len))
-            || !TEST_true(zh_auth_once(sctx2, uctx2, pw, sizeof(pw) - 1,
-                                       NULL, NULL)))
-        goto err;
-
-    OPENSSL_free(params_blob);
-    OPENSSL_free(servkey);
-    OPENSSL_free(crl);
-    OPENSSL_free(cred);
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
-    EVP_PAEA_CTX_free(sctx2);
-    EVP_PAEA_CTX_free(uctx2);
-    return 1;
-
- err:
-    OPENSSL_free(params_blob);
-    OPENSSL_free(servkey);
-    OPENSSL_free(crl);
-    OPENSSL_free(cred);
-    EVP_PAEA_CTX_free(sctx);
-    EVP_PAEA_CTX_free(uctx);
-    EVP_PAEA_CTX_free(sctx2);
-    EVP_PAEA_CTX_free(uctx2);
+    zh_free(srv);
+    zh_free(u1);
+    zh_free(u2);
     return 0;
 }
 
@@ -652,6 +497,5 @@ int setup_tests(void)
     ADD_TEST(test_zh_wrong_password);
     ADD_TEST(test_zh_tampered_message);
     ADD_TEST(test_zh_revocation);
-    ADD_TEST(test_zh_persistence);
     return 1;
 }

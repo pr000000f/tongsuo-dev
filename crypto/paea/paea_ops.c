@@ -15,13 +15,13 @@
 
 /*
  * ZYHW mechanism (GB/T 34953.4-XXXX, 7.3): setup, user registration and
- * revocation operations on top of the prime order cyclic group in
- * EVP_PAEA_CTX.  The serialisation of the exchanged objects lives in
+ * revocation.  Callers hold the group, r, w and the CRL.  Serialisation
+ * lives in
  * paea_blob.c; the anonymous authentication exchange lives in
  * paea_auth.c.
  */
 
-#include <string.h>
+#include <openssl/byteorder.h>
 #include <openssl/bn.h>
 #include <openssl/ec.h>
 #include <openssl/err.h>
@@ -33,39 +33,40 @@
 #include "paea_local.h"
 
 /*
- * Setup (7.3.2): generate the server secret r, w = g^r and, when user
- * revocation is enabled, the additional key ACC(r) = chi with ACC(w) =
- * g^chi, plus a fresh signing key pair for the server signature scheme.
+ * Setup (7.3.2): generate the server secret r, w = g^r and a fresh
+ * signing key pair.  Revocation (7.3.5) reuses this same r; the public
+ * parameter it calls w is the w already published here.  An empty CRL
+ * has accumulator B_0 = g.
  *
  * SM2 keys sign with SM3 per GB/T 32918.2 (the instantiation chosen for
  * the GB/T 17902.2/.3 based digital signature); plain EC keys sign on
  * the curve given by the "sig-curve" parameter, falling back to the
  * mechanism's group itself.
  */
-static EVP_PKEY *paea_keygen_sig(EVP_PAEA_CTX *ctx)
+static EVP_PKEY *paea_keygen_sig(OSSL_LIB_CTX *libctx, const char *propq,
+                                 const char *sig_type, const char *sig_curve,
+                                 const EC_GROUP *group)
 {
     EVP_PKEY_CTX *pctx = NULL;
     EVP_PKEY *pkey = NULL;
 
-    pctx = EVP_PKEY_CTX_new_from_name(ctx->libctx, ctx->sig_type,
-                                      ctx->propq);
+    pctx = EVP_PKEY_CTX_new_from_name(libctx, sig_type, propq);
     if (pctx == NULL || EVP_PKEY_keygen_init(pctx) != 1)
         goto err;
 
-    if (OPENSSL_strcasecmp(ctx->sig_type, "SM2") == 0) {
+    if (OPENSSL_strcasecmp(sig_type, "SM2") == 0) {
         if (EVP_PKEY_CTX_set_group_name(pctx, "sm2") != 1)
             goto err;
     } else {
-        const char *sigcurve = ctx->sig_curve_name;
+        const char *curve = sig_curve;
 
-        if (sigcurve == NULL) {
-            int nid = EC_GROUP_get_curve_name(ctx->group);
+        if (curve == NULL) {
+            int nid = EC_GROUP_get_curve_name(group);
 
             if (nid != NID_undef)
-                sigcurve = OBJ_nid2sn(nid);
+                curve = OBJ_nid2sn(nid);
         }
-        if (sigcurve == NULL
-                || EVP_PKEY_CTX_set_group_name(pctx, sigcurve) != 1)
+        if (curve == NULL || EVP_PKEY_CTX_set_group_name(pctx, curve) != 1)
             goto err;
     }
 
@@ -82,85 +83,67 @@ static EVP_PKEY *paea_keygen_sig(EVP_PAEA_CTX *ctx)
     return NULL;
 }
 
-int paea_zyhw_setup(EVP_PAEA_CTX *ctx)
+int paea_zyhw_setup(const EC_GROUP *group, const char *sig_type,
+                    const char *sig_digest_name, const char *sig_curve_name,
+                    OSSL_LIB_CTX *libctx, const char *propq, int revocation,
+                    BIGNUM **r_out, EC_POINT **w_out, EC_POINT **acc_out,
+                    EVP_PKEY **sig_key_out, char **sig_digest_out)
 {
-    BIGNUM *r = NULL, *chi = NULL;
-    EC_POINT *w = NULL, *accw = NULL, *acc = NULL;
+    const BIGNUM *q;
+    const EC_POINT *g;
+    BIGNUM *r = NULL;
+    EC_POINT *w = NULL, *acc = NULL;
     EVP_PKEY *sigkey = NULL;
-    char *sig_digest_name = NULL;
+    char *digest_out = NULL;
 
-    if (ctx->mechanism != NID_zyhw_mechanism)
-        goto err_notinit;
-    if (ctx->group == NULL || ctx->md == NULL || ctx->sig_type == NULL)
+    *r_out = NULL;
+    *w_out = NULL;
+    *acc_out = NULL;
+    *sig_key_out = NULL;
+    *sig_digest_out = NULL;
+
+    ossl_err_load_PAEA_strings();
+    if (group == NULL || sig_type == NULL
+        || (q = EC_GROUP_get0_order(group)) == NULL
+        || (g = EC_GROUP_get0_generator(group)) == NULL)
         goto err_notinit;
 
     r = BN_new();
-    w = EC_POINT_new(ctx->group);
+    w = EC_POINT_new(group);
     if (r == NULL || w == NULL)
         goto err;
-    if (!paea_rand_in_zq_star(ctx, r))
+    if (!paea_rand_in_zq_star(q, r))
         goto err;
-    if (!paea_generator_mul(ctx, r, w))          /* w = g^r */
+    if (EC_POINT_mul(group, w, r, NULL, NULL, NULL) != 1) /* w = r*g */
         goto err;
 
-    if (ctx->revocation) {
-        chi = BN_new();
-        accw = EC_POINT_new(ctx->group);
-        acc = EC_POINT_new(ctx->group);
-        if (chi == NULL || accw == NULL || acc == NULL)
+    if (revocation) {
+        acc = EC_POINT_new(group);
+        if (acc == NULL)
             goto err;
-        if (!paea_rand_in_zq_star(ctx, chi))
-            goto err;
-        if (!paea_generator_mul(ctx, chi, accw)) /* ACC(w) = g^chi */
-            goto err;
-        /* empty accumulator: B_0 = g */
-        if (!EC_POINT_copy(acc, ctx->gpt))
+        /* empty accumulator: B_0 = g (empty product is 1) */
+        if (!EC_POINT_copy(acc, g))
             goto err;
     }
 
-    sigkey = paea_keygen_sig(ctx);
+    sigkey = paea_keygen_sig(libctx, propq, sig_type, sig_curve_name, group);
     if (sigkey == NULL)
         goto err;
 
-    if (OPENSSL_strcasecmp(ctx->sig_type, "SM2") == 0)
-        sig_digest_name = OPENSSL_strdup("SM3");
-    else if (ctx->sig_digest_name != NULL)
-        sig_digest_name = OPENSSL_strdup(ctx->sig_digest_name);
+    if (OPENSSL_strcasecmp(sig_type, "SM2") == 0)
+        digest_out = OPENSSL_strdup("SM3");
+    else if (sig_digest_name != NULL)
+        digest_out = OPENSSL_strdup(sig_digest_name);
     else
-        sig_digest_name = OPENSSL_strdup("SHA256");
-    if (sig_digest_name == NULL)
+        digest_out = OPENSSL_strdup("SHA256");
+    if (digest_out == NULL)
         goto err;
 
-    /* Install the fresh state, dropping any previous one.  Re-running
-     * setup therefore resets the whole mechanism (all previously issued
-     * credentials become invalid); the standard text does not discuss
-     * re-establishment (implementation notes, issue #9). */
-    paea_ctx_clear_session(ctx);
-    paea_ctx_clear_credential(ctx);
-    paea_ctx_clear_crl(ctx);
-    BN_clear_free(ctx->r);
-    ctx->r = NULL;
-    BN_clear_free(ctx->acckey);
-    ctx->acckey = NULL;
-    EC_POINT_free(ctx->w);
-    ctx->w = NULL;
-    EC_POINT_free(ctx->acc_w);
-    ctx->acc_w = NULL;
-    EVP_MD_free(ctx->sig_md);
-    ctx->sig_md = NULL;
-
-    ctx->r = r;
-    ctx->w = w;
-    ctx->acckey = chi;
-    ctx->acc_w = accw;
-    ctx->acc = acc;
-    EVP_PKEY_free(ctx->sig_key);
-    ctx->sig_key = sigkey;
-    OPENSSL_free(ctx->sig_digest_name);
-    ctx->sig_digest_name = sig_digest_name;
-
-    ctx->params_ready = 1;
-    ctx->server_secret = 1;
+    *r_out = r;
+    *w_out = w;
+    *acc_out = acc;
+    *sig_key_out = sigkey;
+    *sig_digest_out = digest_out;
     return 1;
 
  err_notinit:
@@ -169,140 +152,103 @@ int paea_zyhw_setup(EVP_PAEA_CTX *ctx)
 
  err:
     BN_clear_free(r);
-    BN_clear_free(chi);
     EC_POINT_free(w);
-    EC_POINT_free(accw);
     EC_POINT_free(acc);
     EVP_PKEY_free(sigkey);
-    OPENSSL_free(sig_digest_name);
+    OPENSSL_free(digest_out);
     return 0;
-}
-
-int EVP_PAEA_setup(EVP_PAEA_CTX *ctx)
-{
-    if (ctx == NULL)
-        return 0;
-    if (ctx->mechanism == NID_undef) {
-        ERR_raise(ERR_LIB_PAEA, PAEA_R_WRONG_MECHANISM);
-        return 0;
-    }
-    switch (ctx->mechanism) {
-    case NID_zyhw_mechanism:
-        return paea_zyhw_setup(ctx);
-    default:
-        ERR_raise(ERR_LIB_PAEA, PAEA_R_WRONG_MECHANISM);
-        return 0;
-    }
 }
 
 /*
  * Registration (7.3.3)
  *
- * The server computes m = BS2IP(H_lamda(I_U)) -- REJECT if m = -r -- and
- * issues sigma = g^(1/(r+m)).  When revocation is enabled it also issues
- * the (unprotected) witness W = B_n^(1/(chi+m)), where B_n is the current
- * accumulator value (B_0 = g on an empty CRL); the CRL size the witness
- * was issued for is transported alongside so users can refresh it later.
+ * m = BS2IP(H_lamda(I_U)).  Reject m = -r.  sigma = g^(1/(r+m)).
+ * With revocation, also W = B_n^(1/(r+m)); acc == NULL means revocation
+ * is off.  crl_len is the CRL size the witness was issued against.
  *
- * "issued" blob (implementation defined):
- *   TL(sigma)
- *   [u32 witness_crl_index TL(W)]   when revocation is enabled
+ * issued blob: sigma, and with revocation the witness index and W.
  */
-int EVP_PAEA_server_issue_credential(EVP_PAEA_CTX *ctx,
-                                     const unsigned char *uid,
-                                     size_t uid_len,
-                                     unsigned char *out, size_t *out_len)
+int paea_zyhw_issue_credential(const EC_GROUP *group, const EVP_MD *md,
+                               const BIGNUM *r, const EC_POINT *acc,
+                               size_t crl_len,
+                               const unsigned char *uid, size_t uid_len,
+                               unsigned char **out, size_t *out_len)
 {
+    const BIGNUM *q;
     BIGNUM *m = NULL, *s = NULL, *inv = NULL;
     EC_POINT *sigma = NULL, *wit = NULL;
-    PAEA_BUF issued;
     unsigned char *data = NULL;
-    size_t len = 0;
+    size_t len = 0, off, ptlen;
     BN_CTX *bctx = NULL;
     int ret = 0;
 
-    paea_buf_init(&issued);
-
-    if (uid == NULL || uid_len == 0 || out_len == NULL)
-        goto err;
-    if (!ctx->server_secret || ctx->r == NULL || !ctx->params_ready)
+    *out = NULL;
+    *out_len = 0;
+    q = EC_GROUP_get0_order(group);
+    if (q == NULL || r == NULL)
         goto err_notinit;
 
     m = BN_new();
     s = BN_new();
     inv = BN_new();
-    sigma = EC_POINT_new(ctx->group);
-    if (m == NULL || s == NULL || inv == NULL || sigma == NULL)
-        goto err;
+    sigma = EC_POINT_new(group);
     bctx = BN_CTX_new();
-    if (bctx == NULL)
+    if (m == NULL || s == NULL || inv == NULL || sigma == NULL || bctx == NULL)
         goto err;
 
-    if (!paea_m_of_uid(ctx, uid, uid_len, m))
+    if (!paea_m_of_uid(md, group, uid, uid_len, m))
         goto err;
 
     /* reject if m = -r (r + m = 0 mod q): no inverse exists */
-    if (BN_mod_add(s, ctx->r, m, ctx->q, bctx) != 1)
+    if (BN_mod_add(s, r, m, q, bctx) != 1)
         goto err;
     if (BN_is_zero(s)) {
         ERR_raise(ERR_LIB_PAEA, PAEA_R_UID_REJECTED);
         goto err;
     }
-    if (!paea_inverse_mod_q(ctx, s, inv))
+    if (BN_mod_inverse(inv, s, q, bctx) == NULL)
         goto err;
-    if (!paea_generator_mul(ctx, inv, sigma))   /* sigma = g^(1/(r+m)) */
+    if (EC_POINT_mul(group, sigma, inv, NULL, NULL, bctx) != 1)
+        goto err;                               /* sigma = (1/(r+m))*g */
+
+    ptlen = paea_point_len(group);
+    if (ptlen == 0)
         goto err;
+    len = ptlen;
 
-    if (!paea_buf_point(ctx, &issued, sigma))
-        goto err;
-
-    if (ctx->revocation) {
-        if (ctx->acckey == NULL || ctx->acc == NULL)
-            goto err_notinit;
-
-        wit = EC_POINT_new(ctx->group);
+    if (acc != NULL) {
+        wit = EC_POINT_new(group);
         if (wit == NULL)
             goto err;
-        /* reject if chi + m = 0 mod q (hash collision with the
-         * revocation key or a previously revoked member) */
-        if (BN_mod_add(s, ctx->acckey, m, ctx->q, bctx) != 1)
+        /* W = B_n^(1/(r+m)); the m = -r check above is this inverse */
+        if (EC_POINT_mul(group, wit, NULL, acc, inv, bctx) != 1)
             goto err;
-        if (BN_is_zero(s)) {
-            ERR_raise(ERR_LIB_PAEA, PAEA_R_UID_REJECTED);
-            goto err;
-        }
-        if (!paea_inverse_mod_q(ctx, s, inv))
-            goto err;
-        if (!paea_scalar_mul(ctx, inv, ctx->acc, wit))  /* W = B_n^(1/(chi+m)) */
-            goto err;
-
-        if (!paea_buf_u32(&issued, (uint32_t)ctx->crl_len)
-                || !paea_buf_point(ctx, &issued, wit))
-            goto err;
+        len += 4 + ptlen;
     }
 
-    data = paea_buf_release(&issued, &len);   /* data != NULL on success */
+    data = OPENSSL_malloc(len);
     if (data == NULL)
         goto err;
-
-    if (out == NULL) {
-        *out_len = len;
-    } else if (*out_len < len) {
-        *out_len = len;
-        OPENSSL_free(data);
+    off = paea_put_point(group, data, sigma);
+    if (off == 0)
         goto err;
-    } else {
-        memcpy(out, data, len);
-        *out_len = len;
+    if (wit != NULL) {
+        OPENSSL_store_u32_be(data + off, (uint32_t)crl_len);
+        off += 4;
+        if (paea_put_point(group, data + off, wit) == 0)
+            goto err;
     }
-    OPENSSL_free(data);
+
+    *out = data;
+    *out_len = len;
+    data = NULL;
     ret = 1;
     goto done;
 
  err_notinit:
     ERR_raise(ERR_LIB_PAEA, PAEA_R_NOT_INITIALIZED);
  err:
-    paea_buf_cleanup(&issued);
+    OPENSSL_clear_free(data, len);
  done:
     BN_clear_free(m);
     BN_clear_free(s);
@@ -314,92 +260,86 @@ int EVP_PAEA_server_issue_credential(EVP_PAEA_CTX *ctx,
 }
 
 /*
- * The user recovers sigma = sigma_pw - H_g(pw) for the anonymous
- * authentication only, keeping the wrapped credential sigma_pw at rest.
+ * sigma_pw = sigma + H_g(pw).  The issued blob is parsed here; the
+ * wrapped point (and the witness, when revocation is on) is what the
+ * user keeps.
  */
-int EVP_PAEA_user_store_credential(EVP_PAEA_CTX *ctx,
-                                   const unsigned char *uid, size_t uid_len,
-                                   const unsigned char *pw, size_t pw_len,
-                                   const unsigned char *issued,
-                                   size_t issued_len)
+int paea_zyhw_wrap_credential(const EC_GROUP *group, const EVP_MD *md,
+                              const unsigned char *uid, size_t uid_len,
+                              const unsigned char *pw, size_t pw_len,
+                              const unsigned char *issued, size_t issued_len,
+                              int revocation,
+                              BIGNUM **m_out, EC_POINT **sigma_pw,
+                              EC_POINT **witness, uint32_t *witness_idx)
 {
-    PAEA_RDR r = { issued, issued_len, 0 };
-    size_t unused;
-    BIGNUM *m = NULL, *m_chk = NULL;
-    EC_POINT *sigma = NULL, *s_pw = NULL, *wit = NULL;
-    EC_POINT *hp = NULL;
-    uint32_t witness_idx = 0;
+    const unsigned char *cur = issued;
+    size_t rem = issued_len;
+    uint32_t idx = 0;
+    BIGNUM *m = NULL;
+    EC_POINT *sigma = NULL, *s_pw = NULL, *wit = NULL, *hp = NULL;
+    BN_CTX *bctx = NULL;
     int ret = 0;
 
-    if (uid == NULL || uid_len == 0 || pw == NULL || issued == NULL)
-        goto err;
-    if (!ctx->params_ready || ctx->group == NULL)
-        goto err_notinit;
+    *m_out = NULL;
+    *sigma_pw = NULL;
+    *witness = NULL;
+    *witness_idx = 0;
 
-    sigma = EC_POINT_new(ctx->group);
-    s_pw = EC_POINT_new(ctx->group);
+    sigma = EC_POINT_new(group);
+    s_pw = EC_POINT_new(group);
     m = BN_new();
-    m_chk = BN_new();
-    if (sigma == NULL || s_pw == NULL || m == NULL || m_chk == NULL)
+    bctx = BN_CTX_new();
+    if (sigma == NULL || s_pw == NULL || m == NULL || bctx == NULL)
         goto err;
 
-    if (!paea_rdr_take_point(ctx->group, &r, sigma, &unused))
+    if (!paea_get_point(group, &cur, &rem, sigma)) {
+        ERR_raise(ERR_LIB_PAEA, PAEA_R_BAD_POINT);
         goto err;
-    if (r.remaining == 0 && ctx->revocation) {
+    }
+    if (rem == 0 && revocation) {
         ERR_raise(ERR_LIB_PAEA, PAEA_R_BAD_MESSAGE);
         goto err;
     }
 
-    if (ctx->revocation) {
-        wit = EC_POINT_new(ctx->group);
-        if (wit == NULL
-                || !paea_rdr_take_u32(&r, &witness_idx)
-                || !paea_rdr_take_point(ctx->group, &r, wit, &unused))
+    if (revocation) {
+        wit = EC_POINT_new(group);
+        if (wit == NULL || rem < 4)
             goto err;
+        cur = OPENSSL_load_u32_be(&idx, cur);
+        rem -= 4;
+        if (!paea_get_point(group, &cur, &rem, wit)) {
+            ERR_raise(ERR_LIB_PAEA, PAEA_R_BAD_POINT);
+            goto err;
+        }
     }
-    if (r.remaining != 0) {
+    if (rem != 0) {
         ERR_raise(ERR_LIB_PAEA, PAEA_R_BAD_MESSAGE);
         goto err;
     }
 
     /* sigma_pw = sigma + H_g(pw) */
-    hp = EC_POINT_new(ctx->group);
-    if (hp == NULL || !paea_h_g(ctx, pw, pw_len, hp))
+    hp = EC_POINT_new(group);
+    if (hp == NULL || !paea_h_g(group, md, pw, pw_len, hp))
         goto err;
-    if (!paea_point_add(ctx, sigma, hp, s_pw))
+    if (EC_POINT_add(group, s_pw, sigma, hp, bctx) != 1)
         goto err;
-
-    /* recompute m to stay independent of the issuing transcript */
-    if (!paea_m_of_uid(ctx, uid, uid_len, m))
+    if (!paea_m_of_uid(md, group, uid, uid_len, m))
         goto err;
 
-    /* consistency: the wrapped credential must be reconstructable from
-     * the stored data; sanity check m through a second reduction */
-    if (!paea_m_of_uid(ctx, uid, uid_len, m_chk) || BN_cmp(m, m_chk) != 0)
-        goto err;
-
-    paea_ctx_clear_credential(ctx);
-    OPENSSL_free(ctx->uid);
-    ctx->uid = OPENSSL_memdup(uid, uid_len);
-    if (ctx->uid == NULL)
-        goto err;
-    ctx->uid_len = uid_len;
-    ctx->m = m;
-    ctx->sigma_pw = s_pw;
-    ctx->witness = wit;
-    ctx->witness_crl_index = witness_idx;
+    *m_out = m;
+    *sigma_pw = s_pw;
+    *witness = wit;
+    *witness_idx = idx;
     m = NULL;
     s_pw = NULL;
     wit = NULL;
     ret = 1;
     goto done;
 
- err_notinit:
-    ERR_raise(ERR_LIB_PAEA, PAEA_R_NOT_INITIALIZED);
  err:
-    BN_clear_free(m);            /* m is NULL when ownership moved */
+    BN_clear_free(m);
  done:
-    BN_free(m_chk);              /* check value only, holds no secret */
+    BN_CTX_free(bctx);
     EC_POINT_free(sigma);
     EC_POINT_free(s_pw);
     EC_POINT_free(wit);
@@ -413,65 +353,83 @@ int EVP_PAEA_user_store_credential(EVP_PAEA_CTX *ctx,
 
 /*
  * Append (m, B) to the CRL and update the running accumulator
- * acc = B_n <- B_n^(1/(chi+m)).
+ * acc = B_n <- B_n^(1/(r+m)).
  */
-int paea_crl_revoke(EVP_PAEA_CTX *ctx, const BIGNUM *m)
+int paea_crl_revoke(const EC_GROUP *group, const BIGNUM *r, EC_POINT **acc,
+                    PAEA_CRL_ENTRY **crl, size_t *crl_len, size_t *crl_alloc,
+                    const BIGNUM *m)
 {
+    const BIGNUM *q;
     BIGNUM *s = NULL, *inv = NULL;
     EC_POINT *b = NULL, *acc_new = NULL;
     BN_CTX *bctx = NULL;
 
-    if (!ctx->revocation || ctx->acckey == NULL || ctx->acc == NULL
-            || ctx->group == NULL)
+    size_t i;
+
+    if (group == NULL || r == NULL || acc == NULL || *acc == NULL
+        || crl == NULL || crl_len == NULL || crl_alloc == NULL
+        || (q = EC_GROUP_get0_order(group)) == NULL)
         goto err_notinit;
+
+    /* A second revocation of the same m makes the witness update of
+     * 7.3.5 divide by zero (implementation notes, issue #10). */
+    if (*crl != NULL) {
+        for (i = 0; i < *crl_len; i++) {
+            if (BN_cmp((*crl)[i].m, m) == 0) {
+                ERR_raise(ERR_LIB_PAEA, PAEA_R_UID_REJECTED);
+                return 0;
+            }
+        }
+    }
 
     s = BN_new();
     inv = BN_new();
     bctx = BN_CTX_new();
     if (s == NULL || inv == NULL || bctx == NULL)
         goto err;
-    if (BN_mod_add(s, ctx->acckey, m, ctx->q, bctx) != 1)
+    if (BN_mod_add(s, r, m, q, bctx) != 1)
         goto err;
     if (BN_is_zero(s)) {
-        /* chi + m = 0 mod q: cannot accumulate this member (the
-         * standard does not discuss this 1/q event) */
+        /* r + m = 0 mod q: the inverse in B_i does not exist */
         ERR_raise(ERR_LIB_PAEA, PAEA_R_UID_REJECTED);
         goto err;
     }
-    if (!paea_inverse_mod_q(ctx, s, inv))
+    if (BN_mod_inverse(inv, s, q, bctx) == NULL)
         goto err;
 
-    b = EC_POINT_new(ctx->group);
-    acc_new = EC_POINT_new(ctx->group);
+    b = EC_POINT_new(group);
+    acc_new = EC_POINT_new(group);
     if (b == NULL || acc_new == NULL)
         goto err;
-    if (!paea_scalar_mul(ctx, inv, ctx->acc, b))   /* B_n+1 = B_n^(1/(chi+m)) */
-        goto err;
+    if (EC_POINT_mul(group, b, NULL, *acc, inv, bctx) != 1)
+        goto err;                                  /* B <- B^(1/(r+m)) */
     if (!EC_POINT_copy(acc_new, b))
         goto err;
 
-    /* grow the CRL */
-    if (ctx->crl == NULL && !paea_ctx_setup_crl(ctx, 4))
-        goto err;
-    if (ctx->crl_len == ctx->crl_alloc) {
-        size_t nalloc = ctx->crl_alloc > 0 ? ctx->crl_alloc * 2 : 4;
-        PAEA_CRL_ENTRY *tmp = OPENSSL_realloc(ctx->crl,
-                                              nalloc * sizeof(*tmp));
+    if (*crl == NULL) {
+        *crl = OPENSSL_zalloc(4 * sizeof(**crl));
+        if (*crl == NULL)
+            goto err;
+        *crl_alloc = 4;
+        *crl_len = 0;
+    }
+    if (*crl_len == *crl_alloc) {
+        size_t nalloc = *crl_alloc > 0 ? *crl_alloc * 2 : 4;
+        PAEA_CRL_ENTRY *tmp = OPENSSL_realloc(*crl, nalloc * sizeof(*tmp));
 
         if (tmp == NULL)
             goto err;
-        ctx->crl = tmp;
-        ctx->crl_alloc = nalloc;
+        *crl = tmp;
+        *crl_alloc = nalloc;
     }
-    ctx->crl[ctx->crl_len].m = BN_dup(m);
-    if (ctx->crl[ctx->crl_len].m == NULL)
+    (*crl)[*crl_len].m = BN_dup(m);
+    if ((*crl)[*crl_len].m == NULL)
         goto err;
-    ctx->crl[ctx->crl_len].b = b;
-    ctx->crl_len++;
+    (*crl)[*crl_len].b = b;
+    (*crl_len)++;
 
-    /* rotate the accumulator to the fresh entry */
-    EC_POINT_free(ctx->acc);
-    ctx->acc = acc_new;
+    EC_POINT_free(*acc);
+    *acc = acc_new;
     BN_clear_free(s);
     BN_clear_free(inv);
     BN_CTX_free(bctx);
@@ -488,97 +446,57 @@ int paea_crl_revoke(EVP_PAEA_CTX *ctx, const BIGNUM *m)
     return 0;
 }
 
-int EVP_PAEA_server_revoke(EVP_PAEA_CTX *ctx, const unsigned char *uid,
-                           size_t uid_len)
-{
-    BIGNUM *m = NULL;
-    size_t i;
-    int ret;
-
-    if (!ctx->revocation)
-        goto err_notinit;
-    if (ctx->acckey == NULL)
-        goto err_notinit;
-
-    m = BN_new();
-    if (m == NULL || !paea_m_of_uid(ctx, uid, uid_len, m))
-        goto err;
-
-    /* duplicate revocation is rejected (the witness update of 7.3.5
-     * implicitly requires distinct new CRL entries, implementation
-     * notes issue #10) */
-    for (i = 0; i < ctx->crl_len; i++) {
-        if (BN_cmp(ctx->crl[i].m, m) == 0) {
-            ERR_raise(ERR_LIB_PAEA, PAEA_R_UID_REJECTED);
-            BN_clear_free(m);
-            return 0;
-        }
-    }
-
-    ret = paea_crl_revoke(ctx, m);
-    BN_clear_free(m);
-    return ret;
-
- err_notinit:
-    ERR_raise(ERR_LIB_PAEA, PAEA_R_NOT_INITIALIZED);
- err:
-    BN_clear_free(m);
-    return 0;
-}
 
 /*
  * Witness refresh after the CRL grew (7.3.5):
- *   W <- (W / B_{j+1})^(1/(m_{j+1} - m))   for the newly added entries
- * The user stops (and reports the user revoked) when delta = 0.
+ *   W <- (W - B_{j+1}) * 1/(m_{j+1} - m)   for each newly added entry.
+ * delta = 0 means this user is now on the CRL.
  */
-int EVP_PAEA_user_update_witness(EVP_PAEA_CTX *ctx)
+int paea_zyhw_update_witness(const EC_GROUP *group, const BIGNUM *m,
+                             EC_POINT *witness, uint32_t *witness_idx,
+                             const PAEA_CRL_ENTRY *crl, size_t crl_len)
 {
+    const BIGNUM *q = EC_GROUP_get0_order(group);
     BIGNUM *delta = NULL, *inv = NULL;
     EC_POINT *tmp = NULL, *res = NULL;
     BN_CTX *bctx = NULL;
     size_t i;
     int ret = 0;
 
-    if (ctx->witness == NULL || ctx->m == NULL || !ctx->params_ready)
+    if (q == NULL || witness == NULL || m == NULL)
         goto err_notinit;
-
-    /* the CRL shrank or the witness does not fit the imported list:
-     * re-registration is required */
-    if (ctx->witness_crl_index > ctx->crl_len) {
+    if (*witness_idx > crl_len) {
         ERR_raise(ERR_LIB_PAEA, PAEA_R_WITNESS_INVALID);
         goto err;
     }
 
     delta = BN_new();
     inv = BN_new();
-    tmp = EC_POINT_new(ctx->group);
-    res = EC_POINT_new(ctx->group);
+    tmp = EC_POINT_new(group);
+    res = EC_POINT_new(group);
     bctx = BN_CTX_new();
     if (delta == NULL || inv == NULL || tmp == NULL || res == NULL
-            || bctx == NULL)
+        || bctx == NULL)
         goto err;
 
-    for (i = ctx->witness_crl_index; i < ctx->crl_len; i++) {
-        if (BN_sub(delta, ctx->crl[i].m, ctx->m) != 1)
-            goto err;
-        if (BN_mod(delta, delta, ctx->q, bctx) != 1)
+    for (i = *witness_idx; i < crl_len; i++) {
+        if (BN_mod_sub(delta, crl[i].m, m, q, bctx) != 1)
             goto err;
         if (BN_is_zero(delta)) {
-            /* the user itself is on the CRL now */
             ERR_raise(ERR_LIB_PAEA, PAEA_R_USER_REVOKED);
             goto err;
         }
-        if (!paea_inverse_mod_q(ctx, delta, inv))
+        if (BN_mod_inverse(inv, delta, q, bctx) == NULL)
             goto err;
 
-        /* W' = (W - B_i) * 1/delta */
-        if (!paea_point_sub(ctx, ctx->witness, ctx->crl[i].b, tmp))
+        /* W' = (W - B_i) * 1/(m_i - m) */
+        if (EC_POINT_copy(tmp, crl[i].b) != 1
+            || EC_POINT_invert(group, tmp, bctx) != 1
+            || EC_POINT_add(group, res, witness, tmp, bctx) != 1
+            || EC_POINT_mul(group, tmp, NULL, res, inv, bctx) != 1
+            || EC_POINT_copy(witness, tmp) != 1)
             goto err;
-        if (!paea_scalar_mul(ctx, inv, tmp, res))
-            goto err;
-        if (!EC_POINT_copy(ctx->witness, res))
-            goto err;
-        ctx->witness_crl_index = (uint32_t)(i + 1);
+        *witness_idx = (uint32_t)(i + 1);
     }
 
     ret = 1;
