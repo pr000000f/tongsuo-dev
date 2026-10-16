@@ -1,0 +1,10 @@
+LIBS=../../libcrypto
+
+IF[{- !$disabled{paea} -}]
+    SOURCE[../../libcrypto]=paea_common.c                \
+                            paea_ctx.c                   \
+                            paea_blob.c                  \
+                            paea_ops.c                   \
+                            paea_auth.c                  \
+                            paea_err.c
+ENDIF

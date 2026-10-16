@@ -10,7 +10,7 @@
  */
 
 /* Serialized OID's */
-static const unsigned char so[8024] = {
+static const unsigned char so[8045] = {
     0x2A,0x86,0x48,0x86,0xF7,0x0D,                 /* [    0] OBJ_rsadsi */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,            /* [    6] OBJ_pkcs */
     0x2A,0x86,0x48,0x86,0xF7,0x0D,0x02,0x05,       /* [   13] OBJ_md5 */
@@ -1159,9 +1159,12 @@ static const unsigned char so[8024] = {
     0x2A,0x81,0x1C,0xCF,0x55,0x01,0x86,0x21,       /* [ 7998] OBJ_zuc_128_eea3 */
     0x2A,0x81,0x1C,0xCF,0x55,0x01,0x86,0x22,       /* [ 8006] OBJ_zuc_128_eia3 */
     0x2B,0x06,0x01,0x04,0x01,0x82,0xDA,0x4B,0x2C,  /* [ 8014] OBJ_delegation_usage */
+    0x28,0x81,0x9C,0x29,0x04,0x01,0x02,            /* [ 8023] OBJ_yz_mechanism */
+    0x28,0x81,0x9C,0x29,0x04,0x02,0x01,            /* [ 8030] OBJ_yzw_mechanism */
+    0x28,0x81,0x9C,0x29,0x04,0x02,0x02,            /* [ 8037] OBJ_zyhw_mechanism */
 };
 
-#define NUM_NID 1515
+#define NUM_NID 1518
 static const ASN1_OBJECT nid_objs[NUM_NID] = {
     {"UNDEF", "undefined", NID_undef},
     {"rsadsi", "RSA Data Security, Inc.", NID_rsadsi, 6, &so[0]},
@@ -2678,9 +2681,12 @@ static const ASN1_OBJECT nid_objs[NUM_NID] = {
     {"WBSM4-WSISE-CTR", "wbsm4-wsise-ctr", NID_wbsm4_wsise_ctr},
     {"WBSM4-WSISE-GCM", "wbsm4-wsise-gcm", NID_wbsm4_wsise_gcm},
     {"WBSM4-WSISE-CCM", "wbsm4-wsise-ccm", NID_wbsm4_wsise_ccm},
+    {"YZ", "yz-mechanism", NID_yz_mechanism, 7, &so[8023]},
+    {"YZW", "yzw-mechanism", NID_yzw_mechanism, 7, &so[8030]},
+    {"ZYHW", "zyhw-mechanism", NID_zyhw_mechanism, 7, &so[8037]},
 };
 
-#define NUM_SN 1265
+#define NUM_SN 1268
 static const unsigned int sn_objs[NUM_SN] = {
      364,    /* "AD_DVCS" */
      419,    /* "AES-128-CBC" */
@@ -2908,10 +2914,13 @@ static const unsigned int sn_objs[NUM_SN] = {
     1207,    /* "X942KDF" */
     1206,    /* "X963KDF" */
      185,    /* "X9cm" */
+    1515,    /* "YZ" */
+    1516,    /* "YZW" */
      125,    /* "ZLIB" */
     1487,    /* "ZUC" */
     1488,    /* "ZUC-128-EEA3" */
     1492,    /* "ZUC-128-EIA3" */
+    1517,    /* "ZYHW" */
     1307,    /* "aAissuingDistributionPoint" */
      478,    /* "aRecord" */
      289,    /* "aaControls" */
@@ -3949,7 +3958,7 @@ static const unsigned int sn_objs[NUM_SN] = {
     1289,    /* "zstd" */
 };
 
-#define NUM_LN 1265
+#define NUM_LN 1268
 static const unsigned int ln_objs[NUM_LN] = {
      363,    /* "AD Time Stamping" */
      405,    /* "ANSI X9.62" */
@@ -5212,13 +5221,16 @@ static const unsigned int ln_objs[NUM_LN] = {
      160,    /* "x509Crl" */
     1207,    /* "x942kdf" */
     1206,    /* "x963kdf" */
+    1515,    /* "yz-mechanism" */
+    1516,    /* "yzw-mechanism" */
      125,    /* "zlib compression" */
     1487,    /* "zuc" */
     1488,    /* "zuc-128-eea3" */
     1492,    /* "zuc-128-eia3" */
+    1517,    /* "zyhw-mechanism" */
 };
 
-#define NUM_OBJ 1155
+#define NUM_OBJ 1158
 static const unsigned int obj_objs[NUM_OBJ] = {
        0,    /* OBJ_undef                        0 */
      181,    /* OBJ_iso                          1 */
@@ -5725,6 +5737,9 @@ static const unsigned int obj_objs[NUM_OBJ] = {
     1278,    /* OBJ_id_aa_ATSHashIndex_v3        0 4 0 19122 1 5 */
     1279,    /* OBJ_signedAssertion              0 4 0 19122 1 6 */
      436,    /* OBJ_ucl                          0 9 2342 19200300 */
+    1515,    /* OBJ_yz_mechanism                 1 0 20009 4 1 2 */
+    1516,    /* OBJ_yzw_mechanism                1 0 20009 4 2 1 */
+    1517,    /* OBJ_zyhw_mechanism               1 0 20009 4 2 2 */
     1151,    /* OBJ_ua_pki                       1 2 804 2 1 1 1 */
        2,    /* OBJ_pkcs                         1 2 840 113549 1 */
      431,    /* OBJ_hold_instruction_none        1 2 840 10040 2 1 */

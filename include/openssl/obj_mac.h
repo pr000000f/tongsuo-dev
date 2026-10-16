@@ -5626,4 +5626,23 @@
 #define NID_ML_KEM_1024         1456
 #define OBJ_ML_KEM_1024         OBJ_nistKems,3L
 
+#define OBJ_paeaPasswordOnly            1L,0L,20009L,4L,1L
+
+#define OBJ_paeaStorageExtra            1L,0L,20009L,4L,2L
+
+#define SN_yz_mechanism         "YZ"
+#define LN_yz_mechanism         "yz-mechanism"
+#define NID_yz_mechanism                1515
+#define OBJ_yz_mechanism                OBJ_paeaPasswordOnly,2L
+
+#define SN_yzw_mechanism                "YZW"
+#define LN_yzw_mechanism                "yzw-mechanism"
+#define NID_yzw_mechanism               1516
+#define OBJ_yzw_mechanism               OBJ_paeaStorageExtra,1L
+
+#define SN_zyhw_mechanism               "ZYHW"
+#define LN_zyhw_mechanism               "zyhw-mechanism"
+#define NID_zyhw_mechanism              1517
+#define OBJ_zyhw_mechanism              OBJ_paeaStorageExtra,2L
+
 #endif /* OPENSSL_OBJ_MAC_H */

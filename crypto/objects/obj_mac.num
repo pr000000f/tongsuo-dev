@@ -1282,3 +1282,6 @@ wbsm4_wsise_cfb128		1511
 wbsm4_wsise_ctr		1512
 wbsm4_wsise_gcm		1513
 wbsm4_wsise_ccm		1514
+yz_mechanism		1515
+yzw_mechanism		1516
+zyhw_mechanism		1517

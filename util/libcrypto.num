@@ -6213,3 +6213,17 @@ ZKP_RANGE_PROOF_verify                  6519	3_0_3	EXIST::FUNCTION:ZKP_GADGET
 OSSL_syslog_err                         6520	3_0_3	EXIST::FUNCTION:
 OSSL_syslog_notice                      6521	3_0_3	EXIST::FUNCTION:
 OSSL_syslog_info                        6522	3_0_3	EXIST::FUNCTION:
+
+EVP_PAEA_CTX_new                        6523	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_CTX_free                       6524	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_CTX_set_params                 6525	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_CTX_get_params                 6526	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_setup                          6527	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_server_issue_credential        6528	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_user_store_credential          6529	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_server_auth_init               6530	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_user_auth_prove                6531	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_server_auth_verify             6532	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_CTX_get_session_key            6533	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_server_revoke                  6534	3_5_0	EXIST::FUNCTION:PAEA
+EVP_PAEA_user_update_witness            6535	3_5_0	EXIST::FUNCTION:PAEA

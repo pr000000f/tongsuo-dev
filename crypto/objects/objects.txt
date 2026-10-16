@@ -1743,3 +1743,14 @@ tcg-tr-category 37 : tcg-tr-cat-PublicKey 								: Public Key Trait Category
 nistKems 1 : id-alg-ml-kem-512  : ML-KEM-512
 nistKems 2 : id-alg-ml-kem-768  : ML-KEM-768
 nistKems 3 : id-alg-ml-kem-1024 : ML-KEM-1024
+
+# GB/T 34953.4 (ISO/IEC 20009-4) Anonymous entity authentication based on weak
+# secrets - password-based anonymous entity authentication (PAEA) mechanisms
+!Alias paeaPasswordOnly 1 0 20009 4 1
+!Alias paeaStorageExtra 1 0 20009 4 2
+!Cname yz_mechanism
+paeaPasswordOnly 2                     : YZ                 : yz-mechanism
+!Cname yzw_mechanism
+paeaStorageExtra 1                     : YZW                : yzw-mechanism
+!Cname zyhw_mechanism
+paeaStorageExtra 2                     : ZYHW               : zyhw-mechanism
