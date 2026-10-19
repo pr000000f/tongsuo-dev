@@ -1,9 +1,10 @@
 LIBS=../../libcrypto
-
 IF[{- !$disabled{paea} -}]
-    SOURCE[../../libcrypto]=paea_common.c                \
-                            paea_blob.c                  \
-                            paea_ops.c                   \
-                            paea_auth.c                  \
-                            paea_err.c
+  SOURCE[../../libcrypto]=paea_common.c paea_blob.c paea_ops.c paea_auth.c \
+                         paea_err.c paea_codec.c paea_zyhw_evp.c
+  IF[{- !$disabled{pairing} -}]
+    SOURCE[../../libcrypto]=paea_elgamal.c paea_yzw_lib.c paea_yzw_codec.c \
+                           paea_yzw_keys.c paea_yzw_credential.c paea_yzw_acc.c paea_yzw_math.c \
+                           paea_yzw_client.c paea_yzw_server.c
+  ENDIF
 ENDIF

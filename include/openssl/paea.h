@@ -27,253 +27,202 @@
 extern "C" {
 # endif
 
-/*
- * GB/T 34953.4 ZYHW (7.3).  Callers hold the group, keys, accumulator and
- * CRL themselves; there is no PAEA context object.
- *
- * Setup returns r, w = r*g, the signing key and (when revocation is on)
- * the empty accumulator B_0 = g.  Registration returns an issued byte
- * string; the user wraps that into sigma_pw.  Authentication is the
- * 3-pass exchange: the server keeps y, Y and sigma_S from init and
- * passes them back into verify.
- *
- * The caller frees every *out buffer with OPENSSL_free.  Byte strings
- * use the following fields.  A field whose width the curve or the digest
- * already determines has no length prefix.
- *
- *   point    uncompressed, GB/T 32918.1 4.2.9: 0x04 || X || Y.
- *            X and Y are field elements (4.2.6).  The width is fixed
- *            by the curve.
- *   scalar   an integer in Z_q, |q| bytes.  q is the group order.
- *   c        the challenge, |H| bytes.  H is the digest named by md.
- *   u32      four bytes, most significant byte first.
+/* Unified EVP protocol interface. Each context has one in-flight exchange.
+ * new_ex selects "ZYHW" or "YZW". Setup makes a server; importing public
+ * parameters makes a client. New contexts default to SM2/SM3 (ZYHW) or
+ * SM9-BN256/SM3 (YZW). set_params accepts "group", "digest", "revocation".
+ * ZYHW with the SM2 curve requires SM3; setup and public import enforce this.
+ * Public parameters and registration data require an authenticated channel;
+ * registration data additionally requires confidentiality.
+ * Outputs are allocated once; release with OPENSSL_free (registration data
+ * contains secrets and should be released with OPENSSL_clear_free).
+ * YZW: client init -> server step -> client step -> server step.
+ * ZYHW: server init -> client step -> server step.
+ * A client completing its proof does not confirm server acceptance.
+ * Auth failure consumes the exchange. reset permits a fresh exchange only.
+ * Contexts are not safe for concurrent calls. Serialize complete exchanges
+ * on a server context. There is no API to duplicate server secrets.
  */
+typedef struct evp_paea_ctx_st EVP_PAEA_CTX;
 
-typedef struct paea_crl_entry_st {
-    BIGNUM *m;                  /* identifier, in Z_q */
-    EC_POINT *b;                /* accumulator value B_i */
-} PAEA_CRL_ENTRY;
+/* Create an empty context for one protocol mechanism.
+ * @param libctx Borrowed library context; NULL selects the default context.
+ *               It must outlive the returned PAEA context.
+ * @param mechanism "ZYHW" or "YZW" (case-insensitive). YZW requires pairing.
+ * @param propq Optional algorithm property query; copied by the new context.
+ * @return Newly owned context, or NULL on failure; free with
+ *         EVP_PAEA_CTX_free(). */
+EVP_PAEA_CTX *EVP_PAEA_CTX_new_ex(OSSL_LIB_CTX *libctx, const char *mechanism,
+                                 const char *propq);
 
-/** Frees an array from paea_crl_revoke or paea_decode_crl_blob.
- *  \param  arr  entry array, or NULL
- *  \param  n    number of entries
- */
-void paea_crl_entries_free(PAEA_CRL_ENTRY *arr, size_t n);
+/* Release a context, including its credentials, keys and exchange state.
+ * @param ctx Owned context to release; NULL is allowed. */
+void EVP_PAEA_CTX_free(EVP_PAEA_CTX *ctx);
 
-/** m = BS2IP(H(uid)) mod q.  The caller owns m.
- *  \param  md       H_λ
- *  \param  group    curve; q is its order
- *  \param  uid      user identifier I_U
- *  \param  uid_len  length of uid
- *  \param  m        output, already allocated
- *  \return 1 on success, 0 on error
- */
-int paea_m_of_uid(const EVP_MD *md, const EC_GROUP *group,
-                  const unsigned char *uid, size_t uid_len, BIGNUM *m);
+/* Get the selected mechanism name.
+ * @param ctx Context created by EVP_PAEA_CTX_new_ex().
+ * @return Borrowed constant string, valid until ctx is freed. */
+const char *EVP_PAEA_CTX_get0_name(const EVP_PAEA_CTX *ctx);
 
-/** Setup (7.3.2).  Outputs are newly allocated.
- *  \param  group            mechanism curve
- *  \param  sig_type         "SM2", or "EC" / "ECDSA"
- *  \param  sig_digest_name  signature digest for a non-SM2 key.
- *                           NULL selects SHA-256.  SM2 always uses SM3.
- *  \param  sig_curve_name   curve of a non-SM2 signing key.  NULL uses
- *                           the name of group.  Ignored for SM2.
- *  \param  libctx           library context, or NULL
- *  \param  propq            property query, or NULL
- *  \param  revocation       non-zero to enable revocation
- *  \param  r                server secret, in Z_q*
- *  \param  w                w = r*g
- *  \param  acc              B_0 = g when revocation is on, otherwise NULL
- *  \param  sig_key          signing key pair
- *  \param  sig_digest_out   digest name actually selected; free with
- *                           OPENSSL_free
- *  \return 1 on success, 0 on error
- */
-int paea_zyhw_setup(const EC_GROUP *group, const char *sig_type,
-                    const char *sig_digest_name, const char *sig_curve_name,
-                    OSSL_LIB_CTX *libctx, const char *propq, int revocation,
-                    BIGNUM **r, EC_POINT **w, EC_POINT **acc,
-                    EVP_PKEY **sig_key, char **sig_digest_out);
+/* Set configuration before setup or public-parameter import.
+ * @param ctx Empty context to configure.
+ * @param params OSSL_PARAM_END-terminated array. Recognized entries are
+ *               "group" and "digest" (UTF8_STRING), and "revocation"
+ *               (INTEGER, 0 or 1). Unspecified entries retain their defaults.
+ * @return 1 on success, 0 on failure. */
+int EVP_PAEA_CTX_set_params(EVP_PAEA_CTX *ctx, const OSSL_PARAM params[]);
 
-/** Registration (7.3.3).
- *  Format of *out:
- *    no revocation:   point(sigma)
- *    revocation:      point(sigma) || u32 index || point(W)
- *  index is crl_len, the witness version.
- *  \param  group    mechanism curve
- *  \param  md       H_λ, the same digest the user will use
- *  \param  r        server secret from setup
- *  \param  acc      current accumulator B_n, or NULL if revocation is off
- *  \param  crl_len  CRL length this witness is issued against
- *  \param  uid      user identifier I_U
- *  \param  uid_len  length of uid
- *  \param  out      issued byte string
- *  \param  out_len  length of *out
- *  \return 1 on success, 0 on error
- */
-int paea_zyhw_issue_credential(const EC_GROUP *group, const EVP_MD *md,
-                               const BIGNUM *r, const EC_POINT *acc,
-                               size_t crl_len,
-                               const unsigned char *uid, size_t uid_len,
-                               unsigned char **out, size_t *out_len);
+/* Generate long-term server parameters and secrets.
+ * @param ctx Empty, configured context; it becomes a server on success.
+ * @return 1 on success, 0 on failure. */
+int EVP_PAEA_setup(EVP_PAEA_CTX *ctx);
 
-/** sigma_pw = sigma + H_g(pw).  m, sigma_pw and, when revocation is on,
- *  witness are newly allocated.
- *  \param  group         mechanism curve
- *  \param  md            H_λ
- *  \param  uid           the same I_U the server registered
- *  \param  uid_len       length of uid
- *  \param  pw            password
- *  \param  pw_len        length of pw
- *  \param  issued        byte string from paea_zyhw_issue_credential
- *  \param  issued_len    length of issued
- *  \param  revocation    non-zero if issued contains index and W
- *  \param  m             output, m = BS2IP(H(uid)) mod q
- *  \param  sigma_pw      output, the password-wrapped credential
- *  \param  witness       output W, or NULL when revocation is off
- *  \param  witness_idx   output, the CRL index stored in issued, or 0
- *  \return 1 on success, 0 on error
- */
-int paea_zyhw_wrap_credential(const EC_GROUP *group, const EVP_MD *md,
-                              const unsigned char *uid, size_t uid_len,
-                              const unsigned char *pw, size_t pw_len,
-                              const unsigned char *issued, size_t issued_len,
-                              int revocation,
-                              BIGNUM **m, EC_POINT **sigma_pw,
-                              EC_POINT **witness, uint32_t *witness_idx);
+/* Encode the current public parameters, including public revocation state.
+ * @param ctx Initialized server or client context.
+ * @param out Receives one library-allocated byte string; the caller frees it
+ *            with OPENSSL_free(). Set to NULL on failure.
+ * @param outlen Receives its byte length; set to zero on failure.
+ * @return 1 on success, 0 on failure. */
+int EVP_PAEA_export_public(const EVP_PAEA_CTX *ctx,
+                           unsigned char **out, size_t *outlen);
 
-/** Append m to the CRL and replace *acc with B_n^(1/(r+m)).
- *  The new entry's point is owned by the CRL.
- *  \param  group      mechanism curve
- *  \param  r          server secret
- *  \param  acc        current B_n; replaced by the new accumulator
- *  \param  crl        entry array, grown as needed; NULL is an empty list
- *  \param  crl_len    number of entries
- *  \param  crl_alloc  allocated capacity of *crl, in entries
- *  \param  m          identifier to revoke, in Z_q
- *  \return 1 on success, 0 on error.  A repeated m is rejected.
- */
-int paea_crl_revoke(const EC_GROUP *group, const BIGNUM *r, EC_POINT **acc,
-                    PAEA_CRL_ENTRY **crl, size_t *crl_len, size_t *crl_alloc,
-                    const BIGNUM *m);
+/* Install a server's public parameters into a new client context.
+ * @param ctx Empty context of the same mechanism as the encoded parameters.
+ * @param in Public-parameter bytes from an authenticated source.
+ * @param inlen Length of in in bytes, at most 1 MiB.
+ * @return 1 on success, 0 on failure; this does not authenticate in. */
+int EVP_PAEA_import_public(EVP_PAEA_CTX *ctx,
+                           const unsigned char *in, size_t inlen);
 
-/** Apply CRL entries from *witness_idx onward:
- *    W <- (W - B_i) * 1/(m_i - m)
- *  \param  group        mechanism curve
- *  \param  m            this user's identifier
- *  \param  witness      in/out W
- *  \param  witness_idx  in/out index of the next entry to apply
- *  \param  crl          CRL the user now holds
- *  \param  crl_len      number of entries
- *  \return 1 on success, 0 on error.  m_i = m means this user is revoked.
- */
-int paea_zyhw_update_witness(const EC_GROUP *group, const BIGNUM *m,
-                             EC_POINT *witness, uint32_t *witness_idx,
-                             const PAEA_CRL_ENTRY *crl, size_t crl_len);
+/* Export a client's password-wrapped credential and current witness.
+ * YZW output is 973/1050 bytes without/with revocation. Default ZYHW SM2/SM3
+ * output is 113/190 bytes; other group/digest settings can change its length.
+ * @param ctx Client context with a stored or imported credential.
+ * @param out Receives allocated sensitive bytes; the caller releases them
+ *            with OPENSSL_clear_free(*out, *outlen). NULL on failure.
+ * @param outlen Receives the byte length; zero on failure.
+ * @return 1 on success, 0 on failure. */
+int EVP_PAEA_export_credential(const EVP_PAEA_CTX *ctx,
+                               unsigned char **out, size_t *outlen);
 
-/** Encode a CRL.
- *  Format of *out:
- *    u8 version (3) || u32 count || count * (scalar(m_i) || point(B_i))
- *  \param  group    mechanism curve
- *  \param  crl      entries; NULL is allowed when crl_len is 0
- *  \param  crl_len  number of entries
- *  \param  out      encoded byte string
- *  \param  out_len  length of *out
- *  \return 1 on success, 0 on error
- */
-int paea_encode_crl_blob(const EC_GROUP *group, const PAEA_CRL_ENTRY *crl,
-                         size_t crl_len, unsigned char **out, size_t *out_len);
+/* Restore a previously exported password-wrapped client credential.
+ * @param ctx Idle client with corresponding public parameters already loaded.
+ * @param in Bytes returned by EVP_PAEA_export_credential(); the password is
+ *           not checked by this import operation.
+ * @param inlen Length of in in bytes, at most 1 MiB.
+ * @return 1 on success, 0 on failure. */
+int EVP_PAEA_import_credential(EVP_PAEA_CTX *ctx,
+                               const unsigned char *in, size_t inlen);
 
-/** Decode the byte string from paea_encode_crl_blob.
- *  *crl is newly allocated; free it with paea_crl_entries_free.
- *  \param  group     mechanism curve
- *  \param  blob      encoded CRL
- *  \param  blob_len  length of blob
- *  \param  crl       output entry array
- *  \param  crl_len   number of entries
- *  \return 1 on success, 0 on error
- */
-int paea_decode_crl_blob(const EC_GROUP *group, const unsigned char *blob,
-                         size_t blob_len, PAEA_CRL_ENTRY **crl, size_t *crl_len);
+/* Make a client context from another context's public parameters only.
+ * @param ctx Initialized server or client whose public data is copied.
+ * @return Newly owned client context, or NULL on failure. No server secret,
+ *         credential or session key is copied; free with EVP_PAEA_CTX_free(). */
+EVP_PAEA_CTX *EVP_PAEA_CTX_dup_public(const EVP_PAEA_CTX *ctx);
 
-/** Pass 1, server to user.
- *  Format of *out:
- *    point(Y) || u32 sig_len || sigma_S
- *  sigma_S is the DER signature over point(Y).
- *  \param  group        mechanism curve
- *  \param  sign_key     server signing key
- *  \param  md           signature digest; SM3 when sign_key is SM2
- *  \param  out          message sent to the user
- *  \param  out_len      length of *out
- *  \param  y            server ephemeral scalar; pass back to verify
- *  \param  y_pt         Y = y*g; pass back to verify
- *  \param  sigma_s      signature bytes, the same sigma_S without its length
- *  \param  sigma_s_len  length of *sigma_s
- *  \return 1 on success, 0 on error
- */
-int paea_zyhw_server_auth_init(const EC_GROUP *group, EVP_PKEY *sign_key,
-                               const EVP_MD *md,
-                               unsigned char **out, size_t *out_len,
-                               BIGNUM **y, EC_POINT **y_pt,
-                               unsigned char **sigma_s, size_t *sigma_s_len);
+/* Issue secret registration data for one user on an idle server.
+ * YZW output is 209/286 bytes without/with revocation. Default ZYHW SM2/SM3
+ * output is 65/134 bytes; other group/digest settings can change its length.
+ * @param ctx Initialized, idle server context.
+ * @param uid User identifier bytes; at most 512 bytes. Reuse these exact
+ *            bytes to revoke this user. YZW derives its credential independently
+ *            of uid but, with revocation enabled, indexes the user by its hash.
+ * @param uidlen Length of uid in bytes.
+ * @param out Receives allocated secret registration data; deliver it over a
+ *            confidential authenticated channel, then OPENSSL_clear_free().
+ *            Set to NULL on failure.
+ * @param outlen Receives the output byte length; zero on failure.
+ * @return 1 on success, 0 on failure. */
+int EVP_PAEA_issue_credential(EVP_PAEA_CTX *ctx,
+                              const unsigned char *uid, size_t uidlen,
+                              unsigned char **out, size_t *outlen);
 
-/** Pass 2, user to server.  Revocation is on when acc != NULL.
- *  Format of *out is point(X) || sigma_U, where sigma_U is:
- *    no revocation:  point(T) || c || scalar(s_m) || scalar(s_a)
- *    revocation:     point(T) || point(M) || c || scalar(s_m)
- *                    || scalar(s_a) || scalar(s_z)
- *  \param  group           mechanism curve
- *  \param  md              H_λ
- *  \param  pw_credential   sigma_pw from paea_zyhw_wrap_credential
- *  \param  m               this user's identifier
- *  \param  verify_key      server signature public key
- *  \param  witness         W, or NULL when revocation is off
- *  \param  acc             user's B_n, or NULL when revocation is off
- *  \param  pw              password
- *  \param  pw_len          length of pw
- *  \param  msg1            message from paea_zyhw_server_auth_init
- *  \param  msg1_len        length of msg1
- *  \param  out             message sent to the server
- *  \param  out_len         length of *out
- *  \param  session_key     optional.  Both this and session_key_len must
- *                          be non-NULL to receive it.  Raw digest, |H| bytes.
- *  \param  session_key_len length of *session_key
- *  \return 1 on success, 0 on error
- */
-int paea_zyhw_user_prove(const EC_GROUP *group, EVP_MD *md,
-                         const EC_POINT *pw_credential, const BIGNUM *m,
-                         EVP_PKEY *verify_key,
-                         const EC_POINT *witness, const EC_POINT *acc,
-                         const unsigned char *pw, size_t pw_len,
-                         const unsigned char *msg1, size_t msg1_len,
-                         unsigned char **out, size_t *out_len,
-                         unsigned char **session_key, size_t *session_key_len);
+/* Password-wrap issued registration data inside an idle client context.
+ * @param ctx Client with current public parameters already imported.
+ * @param uid Identifier used at registration, at most 512 bytes. ZYHW uses
+ *            it in credential computation; YZW currently does not bind it.
+ * @param uidlen Length of uid in bytes.
+ * @param pw Local password bytes; never sent to the server.
+ * @param pwlen Length of pw in bytes.
+ * @param issued Secret bytes returned by EVP_PAEA_issue_credential().
+ * @param issuedlen Length of issued in bytes, at most 1 MiB.
+ * @return 1 on success, 0 on failure. Use EVP_PAEA_export_credential() to
+ *         persist the wrapped credential. */
+int EVP_PAEA_store_credential(EVP_PAEA_CTX *ctx,
+                              const unsigned char *uid, size_t uidlen,
+                              const unsigned char *pw, size_t pwlen,
+                              const unsigned char *issued, size_t issuedlen);
 
-/** Pass 3.  Returns 1 for ACCEPT and 0 for REJECT.
- *  \param  group            mechanism curve
- *  \param  md               H_λ
- *  \param  r                server secret
- *  \param  y                ephemeral scalar from paea_zyhw_server_auth_init
- *  \param  y_pt             Y from paea_zyhw_server_auth_init
- *  \param  sigma_s          signature bytes from paea_zyhw_server_auth_init,
- *                           not the whole first message
- *  \param  sigma_s_len      length of sigma_s
- *  \param  acc              server's current B_n, or NULL when revocation
- *                           is off
- *  \param  msg2             message from paea_zyhw_user_prove
- *  \param  msg2_len         length of msg2
- *  \param  session_key      optional, same rule as paea_zyhw_user_prove.
- *                           Raw digest, |H| bytes.
- *  \param  session_key_len  length of *session_key
- */
-int paea_zyhw_server_verify(const EC_GROUP *group, EVP_MD *md,
-                            const BIGNUM *r, const BIGNUM *y,
-                            const EC_POINT *y_pt,
-                            const unsigned char *sigma_s, size_t sigma_s_len,
-                            const EC_POINT *acc,
-                            const unsigned char *msg2, size_t msg2_len,
-                            unsigned char **session_key,
-                            size_t *session_key_len);
+/* Revoke a registered user on an idle server with revocation enabled.
+ * @param ctx Initialized server context with revocation enabled.
+ * @param uid Exact identifier bytes used when the user was registered.
+ * @param uidlen Length of uid in bytes, at most 512 bytes.
+ * @return 1 on success, 0 on failure. Export updated public parameters and
+ *         distribute the new revocation state to clients. */
+int EVP_PAEA_revoke(EVP_PAEA_CTX *ctx, const unsigned char *uid, size_t uidlen);
+
+/* Refresh an idle client's public revocation state and local witness.
+ * @param ctx Client with revocation enabled and a stored/imported credential.
+ * @param source Initialized server or separate public client context with
+ *               trusted newer state from the same system and mechanism.
+ *               Borrowed; no secret key is copied from it.
+ * @return 1 on success, 0 on failure. Re-export the credential and matching
+ *         public parameters to persist the updated witness. */
+int EVP_PAEA_refresh(EVP_PAEA_CTX *ctx, const EVP_PAEA_CTX *source);
+
+/* Start one authentication exchange on an idle initialized context.
+ * YZW client M1 is 2208/2803 bytes without/with revocation. ZYHW server M1
+ * has a variable-length DER signature; do not infer its length from a prior
+ * invocation.
+ * @param ctx ZYHW server or YZW client with a stored/imported credential.
+ *            Only the YZW client needs a credential.
+ * @param pw Client password bytes for YZW; NULL on the ZYHW server.
+ * @param pwlen Length of pw in bytes; zero on the ZYHW server.
+ * @param out Receives an allocated M1 byte string; free with OPENSSL_free().
+ *            Set to NULL on failure.
+ * @param outlen Receives the M1 byte length; zero on failure.
+ * @return 1 on success, 0 on failure. Reset after a failed exchange. */
+int EVP_PAEA_auth_init(EVP_PAEA_CTX *ctx, const unsigned char *pw, size_t pwlen,
+                       unsigned char **out, size_t *outlen);
+
+/* Process the next complete authentication message.
+ * YZW server M2 is always 141 bytes; client M3 is 216/324 bytes without/with
+ * revocation. Default ZYHW SM2/SM3 client M2 is 226/323 bytes; other
+ * group/digest settings can change its length. The final server step of
+ * either mechanism succeeds with NULL output and zero length.
+ * @param ctx Context at the next stage of its in-flight exchange.
+ * @param pw Client password bytes only for the ZYHW client processing M1;
+ *           otherwise NULL.
+ * @param pwlen Length of pw in bytes; otherwise zero.
+ * @param in Complete message received from the peer.
+ * @param inlen Length of in in bytes, at most 1 MiB.
+ * @param out Receives an allocated outgoing message, or NULL for a successful
+ *            final server step; free non-NULL output with OPENSSL_free().
+ *            Set to NULL on failure.
+ * @param outlen Receives the outgoing byte length; zero for final success
+ *               or failure.
+ * @return 1 on success, 0 on failure. Reset before a new exchange. */
+int EVP_PAEA_auth_step(EVP_PAEA_CTX *ctx, const unsigned char *pw, size_t pwlen,
+                       const unsigned char *in, size_t inlen,
+                       unsigned char **out, size_t *outlen);
+
+/* Discard the current exchange and session key; retain long-term state.
+ * @param ctx Initialized context to reset before a new authentication or
+ *            management operation. */
+void EVP_PAEA_auth_reset(EVP_PAEA_CTX *ctx);
+
+/* Read the locally completed session key.
+ * With the default SM3 digest (including YZW), its length is 32 bytes;
+ * other supported ZYHW digests use their own output length.
+ * @param ctx Context whose exchange completed locally; client completion
+ *            alone does not confirm server acceptance.
+ * @param out Caller-owned output buffer, or NULL to query the required size.
+ *            Clear its contents when no longer needed.
+ * @param outlen On input, buffer capacity when out is non-NULL; on output,
+ *               actual length or required length if capacity was too small.
+ * @return 1 on success (including size query), 0 on failure. */
+int EVP_PAEA_get_session_key(const EVP_PAEA_CTX *ctx,
+                             unsigned char *out, size_t *outlen);
 
 # ifdef  __cplusplus
 }

@@ -886,7 +886,7 @@ IF[{- !$disabled{tests} -}]
     ENDIF
 
     IF[{- !$disabled{paea} -}]
-      PROGRAMS{noinst}=paea_zyhw_test
+      PROGRAMS{noinst}=paea_zyhw_test paea_evp_test paea_kat_test
     ENDIF
 
     SOURCE[poly1305_internal_test]=poly1305_internal_test.c
@@ -1412,3 +1412,19 @@ _____
 _____
    }
 -}
+
+IF[{- !$disabled{tests} && !$disabled{paea} -}]
+  SOURCE[paea_kat_test]=paea_kat_test.c
+  INCLUDE[paea_kat_test]=../include
+  DEPEND[paea_kat_test]=../libcrypto
+  SOURCE[paea_evp_test]=paea_evp_test.c
+  INCLUDE[paea_evp_test]=.. ../include ../apps/include
+  DEPEND[paea_evp_test]=../libcrypto.a libtestutil.a
+ENDIF
+
+IF[{- !$disabled{tests} && !$disabled{pairing} -}]
+  PROGRAMS{noinst}=pairing_test
+  SOURCE[pairing_test]=pairing_test.c
+  INCLUDE[pairing_test]=.. ../include ../apps/include
+  DEPEND[pairing_test]=../libcrypto.a libtestutil.a
+ENDIF

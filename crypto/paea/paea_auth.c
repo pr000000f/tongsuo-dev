@@ -91,6 +91,8 @@ static int paea_zyhw_challenge(const EC_GROUP *group, const EVP_MD *md,
     if (group == NULL || (g = EC_GROUP_get0_generator(group)) == NULL)
         return 0;
 
+    if (!paea_check_digest(group, md))
+        return 0;
     hash = EVP_MD_CTX_new();
     if (hash == NULL) {
         ERR_raise(ERR_LIB_PAEA, ERR_R_EVP_LIB);
@@ -168,6 +170,8 @@ static int paea_zyhw_session_key(const EC_GROUP *group, const EVP_MD *md,
     *out = NULL;
     *out_len = 0;
 
+    if (!paea_check_digest(group, md))
+        return 0;
     hash = EVP_MD_CTX_new();
     if (hash == NULL) {
         ERR_raise(ERR_LIB_PAEA, ERR_R_EVP_LIB);

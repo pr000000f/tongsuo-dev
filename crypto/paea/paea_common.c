@@ -60,6 +60,23 @@ int paea_check_group(const EC_GROUP *group)
     return ok;
 }
 
+/* The SM2 profile uses SM3 for all ZYHW hashes, including explicit groups. */
+int paea_check_digest(const EC_GROUP *group, const EVP_MD *md)
+{
+    int nid;
+
+    if (EVP_MD_is_a(md, "SM3"))
+        return 1;
+    nid = EC_GROUP_check_named_curve(group, 0, NULL);
+    if (nid < 0)
+        return 0;
+    if (nid == NID_sm2) {
+        ERR_raise(ERR_LIB_PAEA, ERR_R_UNSUPPORTED);
+        return 0;
+    }
+    return 1;
+}
+
 size_t paea_point_len(const EC_GROUP *group)
 {
     const EC_POINT *g = EC_GROUP_get0_generator(group);
@@ -154,6 +171,8 @@ int paea_m_of_uid(const EVP_MD *md, const EC_GROUP *group,
     BN_CTX *bctx = NULL;
     int ret = 0;
 
+    if (!paea_check_digest(group, md))
+        return 0;
     if (q == NULL || EVP_Digest(uid, uid_len, dig, &dlen, md, NULL) != 1)
         goto end;
     tmp = BN_bin2bn(dig, (int)dlen, NULL);
@@ -215,6 +234,8 @@ int paea_h_g(const EC_GROUP *group, const EVP_MD *md,
 
     if (group == NULL || md == NULL || out == NULL)
         goto end;
+    if (!paea_check_digest(group, md))
+        return 0;
     cofactor = EC_GROUP_get0_cofactor(group);
 
     buf = OPENSSL_malloc(in_len + 1);

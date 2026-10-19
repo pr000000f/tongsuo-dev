@@ -1,0 +1,4 @@
+LIBS=../../libcrypto
+IF[{- !$disabled{pairing} -}]
+  SOURCE[../../libcrypto]=sm9_core.c pairing_lib.c
+ENDIF
