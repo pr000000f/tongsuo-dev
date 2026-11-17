@@ -247,9 +247,10 @@ static int test_verify_popo_crmf_bad_pubkey(void)
     OSSL_CMP_CTX *ctx = NULL;
     OSSL_CRMF_MSG *crm = NULL;
     OSSL_CRMF_CERTTEMPLATE *tmpl;
-    OSSL_CRMF_POPOSIGNINGKEY *sig;
+    OSSL_CRMF_POPOSIGNINGKEY *sig = NULL;
     X509_NAME *name = NULL;
     X509_ALGOR *alg = NULL;
+    ASN1_BIT_STRING *forge = NULL;
     EVP_PKEY *pkey = NULL;
     unsigned char *tbs = NULL;
     int tbslen, k, res = 0;
@@ -272,21 +273,29 @@ static int test_verify_popo_crmf_bad_pubkey(void)
                            ASN1_ITEM_rptr(OSSL_CRMF_CERTREQUEST));
     k = EVP_PKEY_get_size(pkey);
     if (!TEST_int_gt(tbslen, 0) || !TEST_ptr(alg = sha256_rsa_alg())
-            || !TEST_ptr(sig = OSSL_CRMF_POPOSIGNINGKEY_new()))
+            || !TEST_ptr(sig = OSSL_CRMF_POPOSIGNINGKEY_new())
+            || !TEST_ptr(forge = forge_pkcs1_sig(tbs, (size_t)tbslen, k)))
         goto err;
+
+    /* _new() already allocated these fields; replace without leaking. */
+    X509_ALGOR_free(sig->algorithmIdentifier);
+    sig->algorithmIdentifier = alg;
+    alg = NULL;
+    ASN1_BIT_STRING_free(sig->signature);
+    sig->signature = forge;
+    forge = NULL;
+
     crm->popo = OSSL_CRMF_POPO_new();
     if (!TEST_ptr(crm->popo))
         goto err;
     crm->popo->type = OSSL_CRMF_POPO_SIGNATURE;
     crm->popo->value.signature = sig;
-    sig->algorithmIdentifier = alg;
-    alg = NULL;
-    if (!TEST_ptr(sig->signature = forge_pkcs1_sig(tbs, (size_t)tbslen, k)))
-        goto err;
+    sig = NULL;
 
     /* Sanity: the forged signature verifies without a private key. */
     if (!TEST_int_eq(ASN1_item_verify_ex(ASN1_ITEM_rptr(OSSL_CRMF_CERTREQUEST),
-                                         sig->algorithmIdentifier, sig->signature,
+                                         crm->popo->value.signature->algorithmIdentifier,
+                                         crm->popo->value.signature->signature,
                                          crm->certReq, NULL, pkey, libctx, NULL),
                      1))
         goto err;
@@ -298,6 +307,8 @@ static int test_verify_popo_crmf_bad_pubkey(void)
     OPENSSL_free(tbs);
     X509_NAME_free(name);
     X509_ALGOR_free(alg);
+    ASN1_BIT_STRING_free(forge);
+    OSSL_CRMF_POPOSIGNINGKEY_free(sig);
     EVP_PKEY_free(pkey);
     OSSL_CMP_MSG_free(msg);
     return res;
