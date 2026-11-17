@@ -1213,6 +1213,7 @@ BP_R1CS_PROOF *BP_R1CS_PROOF_decode(const unsigned char *in, size_t size)
     p += len;
 
     proof->ip_proof = ip_proof;
+    ip_proof = NULL;
 
     sk_BIGNUM_free(sk_bn);
     sk_EC_POINT_free(sk_point);
@@ -1221,6 +1222,24 @@ BP_R1CS_PROOF *BP_R1CS_PROOF_decode(const unsigned char *in, size_t size)
     return proof;
 
 err:
+    /*
+     * proof->* fields below are aliases into sk_point/sk_bn. Clear them so
+     * BP_R1CS_PROOF_free does not double-free after pop_free.
+     */
+    if (proof != NULL) {
+        proof->AI1 = NULL;
+        proof->AO1 = NULL;
+        proof->S1 = NULL;
+        proof->T1 = NULL;
+        proof->T3 = NULL;
+        proof->T4 = NULL;
+        proof->T5 = NULL;
+        proof->T6 = NULL;
+        proof->taux = NULL;
+        proof->mu = NULL;
+        proof->tx = NULL;
+        proof->ip_proof = NULL;
+    }
     sk_BIGNUM_pop_free(sk_bn, BN_free);
     sk_EC_POINT_pop_free(sk_point, EC_POINT_free);
     bp_inner_product_proof_free(ip_proof);

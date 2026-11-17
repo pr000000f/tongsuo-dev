@@ -7,6 +7,7 @@
  * https://github.com/Tongsuo-Project/Tongsuo/blob/master/LICENSE.txt
  */
 
+#include <limits.h>
 #include <openssl/err.h>
 #include <crypto/ec.h>
 #include <crypto/ctype.h>
@@ -160,6 +161,7 @@ void BP_R1CS_PROOF_free(BP_R1CS_PROOF *proof)
     BN_free(proof->taux);
     BN_free(proof->mu);
     BN_free(proof->tx);
+    bp_inner_product_proof_free(proof->ip_proof);
     CRYPTO_THREAD_lock_free(proof->lock);
     OPENSSL_clear_free((void *)proof, sizeof(*proof));
 }
@@ -290,7 +292,8 @@ BP_R1CS_PROOF *BP_R1CS_PROOF_prove(BP_R1CS_CTX *ctx)
     EC_GROUP *group;
     const BIGNUM *order;
     BN_CTX *bn_ctx = NULL;
-    int i, j, k, m, n, nn, n1, seed_buf_len, size, padded_n, pp_capacity;
+    int i, j, k, m, n, nn, n1, size, padded_n, pp_capacity;
+    size_t seed_buf_len = 0, r_len;
     unsigned char *seed_buf = NULL, *buf = NULL;
     BIGNUM *alpha, *beta, *rho, *r = NULL, *product;
     BIGNUM **sL = NULL, **sR = NULL;
@@ -390,11 +393,19 @@ BP_R1CS_PROOF *BP_R1CS_PROOF_prove(BP_R1CS_CTX *ctx)
 
     m = sk_BIGNUM_num(witness->sk_r);
     if (m > 0) {
-        r = sk_BIGNUM_value(witness->sk_r, 0);
-        if (r == NULL)
-            goto err;
-
-        seed_buf_len = BN_num_bytes(r) * m * 2;
+        /*
+         * Size the seed buffer from every sk_r element (not just the first):
+         * BN_num_bytes(r0)*m under-allocates when later scalars are wider.
+         */
+        for (i = 0; i < m; i++) {
+            r = sk_BIGNUM_value(witness->sk_r, i);
+            if (r == NULL)
+                goto err;
+            r_len = (size_t)BN_num_bytes(r);
+            if (r_len > SIZE_MAX - seed_buf_len)
+                goto err;
+            seed_buf_len += r_len;
+        }
         if ((seed_buf = OPENSSL_zalloc(seed_buf_len)) == NULL)
             goto err;
     }
@@ -407,13 +418,17 @@ BP_R1CS_PROOF *BP_R1CS_PROOF_prove(BP_R1CS_CTX *ctx)
             goto err;
 
         size = BN_num_bytes(r);
-        if (!BN_bn2bin(r, buf))
+        if (seed_buf == NULL
+                || (size_t)(buf - seed_buf) > seed_buf_len
+                || (size_t)size > seed_buf_len - (size_t)(buf - seed_buf)
+                || !BN_bn2bin(r, buf))
             goto err;
 
         buf += size;
     }
 
-    RAND_seed(seed_buf, buf - seed_buf);
+    if (seed_buf != NULL)
+        RAND_seed(seed_buf, (int)(buf - seed_buf));
 
     n = n1 * 2 + 1;
 

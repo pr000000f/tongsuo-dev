@@ -1622,6 +1622,139 @@ static int test_witness_decode_rejects_long_varname(void)
     return ret;
 }
 
+/*
+ * 807736210: prove used BN_num_bytes(r0)*m for seed_buf; a short r0 and
+ * wider later scalars overflowed. Allocation must follow the real sum.
+ */
+static int test_r1cs_prove_short_r0_no_overflow(void)
+{
+    int ret = 0;
+    ZKP_TRANSCRIPT *transcript = NULL;
+    BP_PUB_PARAM *pp = NULL;
+    BP_WITNESS *witness = NULL;
+    BP_R1CS_CTX *ctx = NULL;
+    BP_R1CS_PROOF *proof = NULL;
+    BP_R1CS_LINEAR_COMBINATION *lc_a = NULL, *lc_b = NULL, *lc_c = NULL;
+    BIGNUM *a = NULL, *b = NULL, *c = NULL, *r0 = NULL;
+
+    if (!TEST_ptr(transcript = ZKP_TRANSCRIPT_new(ZKP_TRANSCRIPT_METHOD_sha256(),
+                                                  "r1cs_short_r0"))
+            || !TEST_ptr(pp = BP_PUB_PARAM_new_by_curve_id(NID_secp256k1, 128, 1))
+            || !TEST_ptr(witness = BP_WITNESS_new(pp))
+            || !TEST_ptr(ctx = BP_R1CS_CTX_new(pp, witness, transcript))
+            || !TEST_ptr(a = BN_new())
+            || !TEST_ptr(b = BN_new())
+            || !TEST_ptr(c = BN_new())
+            || !TEST_true(BN_set_word(a, 3))
+            || !TEST_true(BN_set_word(b, 4))
+            || !TEST_true(BN_set_word(c, 7))
+            || !TEST_ptr(lc_a = BP_WITNESS_r1cs_linear_combination_commit(witness,
+                                                                         "a", a))
+            || !TEST_ptr(lc_b = BP_WITNESS_r1cs_linear_combination_commit(witness,
+                                                                         "b", b))
+            || !TEST_ptr(lc_c = BP_WITNESS_r1cs_linear_combination_commit(witness,
+                                                                         "c", c)))
+        goto err;
+
+    /* Constraint: a + b - c = 0 */
+    if (!TEST_true(BP_R1CS_LINEAR_COMBINATION_add(lc_a, lc_b))
+            || !TEST_true(BP_R1CS_LINEAR_COMBINATION_sub(lc_a, lc_c))
+            || !TEST_true(BP_R1CS_LINEAR_COMBINATION_constrain(lc_a, ctx)))
+        goto err;
+
+    if (!TEST_int_ge(sk_BIGNUM_num(witness->sk_r), 2)
+            || !TEST_ptr(r0 = sk_BIGNUM_value(witness->sk_r, 0))
+            || !TEST_true(BN_set_word(r0, 1)))
+        goto err;
+
+    if (!TEST_ptr(proof = BP_R1CS_PROOF_prove(ctx)))
+        goto err;
+
+    ret = 1;
+ err:
+    BP_R1CS_PROOF_free(proof);
+    BP_R1CS_LINEAR_COMBINATION_free(lc_a);
+    BP_R1CS_LINEAR_COMBINATION_free(lc_b);
+    BP_R1CS_LINEAR_COMBINATION_free(lc_c);
+    BN_free(a);
+    BN_free(b);
+    BN_free(c);
+    BP_R1CS_CTX_free(ctx);
+    BP_WITNESS_free(witness);
+    BP_PUB_PARAM_free(pp);
+    ZKP_TRANSCRIPT_free(transcript);
+    return ret;
+}
+
+/*
+ * 807788811: after aliasing stack elements into proof fields, a later decode
+ * failure used to pop_free the stack and then free proof -> double-free.
+ */
+static int test_r1cs_proof_decode_err_no_double_free(void)
+{
+    int ret = 0;
+    ZKP_TRANSCRIPT *transcript = NULL;
+    BP_PUB_PARAM *pp = NULL;
+    BP_WITNESS *witness = NULL;
+    BP_R1CS_CTX *ctx = NULL;
+    BP_R1CS_PROOF *proof = NULL, *bad = NULL;
+    BP_R1CS_LINEAR_COMBINATION *lc_a = NULL, *lc_b = NULL, *lc_c = NULL;
+    BIGNUM *a = NULL, *b = NULL, *c = NULL;
+    unsigned char *bin = NULL;
+    size_t size;
+
+    if (!TEST_ptr(transcript = ZKP_TRANSCRIPT_new(ZKP_TRANSCRIPT_METHOD_sha256(),
+                                                  "r1cs_decode_df"))
+            || !TEST_ptr(pp = BP_PUB_PARAM_new_by_curve_id(NID_secp256k1, 128, 1))
+            || !TEST_ptr(witness = BP_WITNESS_new(pp))
+            || !TEST_ptr(ctx = BP_R1CS_CTX_new(pp, witness, transcript))
+            || !TEST_ptr(a = BN_new())
+            || !TEST_ptr(b = BN_new())
+            || !TEST_ptr(c = BN_new())
+            || !TEST_true(BN_set_word(a, 3))
+            || !TEST_true(BN_set_word(b, 4))
+            || !TEST_true(BN_set_word(c, 7))
+            || !TEST_ptr(lc_a = BP_WITNESS_r1cs_linear_combination_commit(witness,
+                                                                         "a", a))
+            || !TEST_ptr(lc_b = BP_WITNESS_r1cs_linear_combination_commit(witness,
+                                                                         "b", b))
+            || !TEST_ptr(lc_c = BP_WITNESS_r1cs_linear_combination_commit(witness,
+                                                                         "c", c))
+            || !TEST_true(BP_R1CS_LINEAR_COMBINATION_add(lc_a, lc_b))
+            || !TEST_true(BP_R1CS_LINEAR_COMBINATION_sub(lc_a, lc_c))
+            || !TEST_true(BP_R1CS_LINEAR_COMBINATION_constrain(lc_a, ctx))
+            || !TEST_ptr(proof = BP_R1CS_PROOF_prove(ctx)))
+        goto err;
+
+    size = BP_R1CS_PROOF_encode(proof, NULL, 0);
+    /*
+     * Truncate after points+scalars are aliased into the proof object so the
+     * failure hits ip_proof decode (the historical double-free path).
+     */
+    if (!TEST_size_t_gt(size, 8)
+            || !TEST_ptr(bin = OPENSSL_zalloc(size))
+            || !TEST_size_t_eq(BP_R1CS_PROOF_encode(proof, bin, size), size)
+            || !TEST_ptr_null(bad = BP_R1CS_PROOF_decode(bin, size - 1)))
+        goto err;
+
+    ret = 1;
+ err:
+    BP_R1CS_PROOF_free(bad);
+    BP_R1CS_PROOF_free(proof);
+    BP_R1CS_LINEAR_COMBINATION_free(lc_a);
+    BP_R1CS_LINEAR_COMBINATION_free(lc_b);
+    BP_R1CS_LINEAR_COMBINATION_free(lc_c);
+    BN_free(a);
+    BN_free(b);
+    BN_free(c);
+    OPENSSL_free(bin);
+    BP_R1CS_CTX_free(ctx);
+    BP_WITNESS_free(witness);
+    BP_PUB_PARAM_free(pp);
+    ZKP_TRANSCRIPT_free(transcript);
+    return ret;
+}
+
 int setup_tests(void)
 {
     ADD_TEST(range_proof_tests);
@@ -1629,6 +1762,8 @@ int setup_tests(void)
     ADD_TEST(test_pp_decode_rejects_unequal_GH);
     ADD_TEST(test_witness_decode_rejects_unequal_rv);
     ADD_TEST(test_witness_decode_rejects_long_varname);
+    ADD_TEST(test_r1cs_prove_short_r0_no_overflow);
+    ADD_TEST(test_r1cs_proof_decode_err_no_double_free);
     ADD_TEST(r1cs_range_tests);
     ADD_TEST(r1cs_proof_test1_should_ok);
     ADD_TEST(r1cs_proof_test1_should_failed);
