@@ -248,6 +248,7 @@ static char *app_get_pass(const char *arg, int keepbio)
 {
     static BIO *pwdbio = NULL;
     char *tmp, tpass[APP_PASS_LEN];
+    const char *colon;
     int i;
 
     /* PASS_SOURCE_SIZE_MAX = max number of chars before ':' in below strings */
@@ -308,15 +309,15 @@ static char *app_get_pass(const char *arg, int keepbio)
             }
         } else {
             /* argument syntax error; do not reveal too much about arg */
-            tmp = strchr(arg, ':');
-            if (tmp == NULL || tmp - arg > PASS_SOURCE_SIZE_MAX)
+            colon = strchr(arg, ':');
+            if (colon == NULL || colon - arg > PASS_SOURCE_SIZE_MAX)
                 BIO_printf(bio_err,
                            "Invalid password argument, missing ':' within the first %d chars\n",
                            PASS_SOURCE_SIZE_MAX + 1);
             else
                 BIO_printf(bio_err,
                            "Invalid password argument, starting with \"%.*s\"\n",
-                           (int)(tmp - arg + 1), arg);
+                           (int)(colon - arg + 1), arg);
             return NULL;
         }
     }
