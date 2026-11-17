@@ -647,6 +647,13 @@ IF[{- !$disabled{tests} -}]
   INCLUDE[x509_time_test]=../include ../apps/include
   DEPEND[x509_time_test]=../libcrypto libtestutil.a
 
+  IF[{- !$disabled{'delegated-credential'} -}]
+    PROGRAMS{noinst}=dc_time_test
+    SOURCE[dc_time_test]=dc_time_test.c
+    INCLUDE[dc_time_test]=../include ../apps/include
+    DEPEND[dc_time_test]=../libcrypto libtestutil.a
+  ENDIF
+
   SOURCE[x509_test]=x509_test.c
   INCLUDE[x509_test]=../include ../apps/include
   DEPEND[x509_test]=../libcrypto libtestutil.a

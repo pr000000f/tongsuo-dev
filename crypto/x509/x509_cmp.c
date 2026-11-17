@@ -8,12 +8,14 @@
  */
 
 #include <stdio.h>
+#include <limits.h>
 #include "internal/cryptlib.h"
 #include <openssl/asn1.h>
 #include <openssl/objects.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/core_names.h>
+#include "crypto/asn1.h"
 #include "crypto/x509.h"
 
 int X509_issuer_and_serial_cmp(const X509 *a, const X509 *b)
@@ -657,22 +659,38 @@ int DC_check_valid(X509 *parent_cert, DELEGATED_CREDENTIAL *dc)
 
 int DC_check_time_valid(X509 *parent_cert, DELEGATED_CREDENTIAL *dc)
 {
-    ASN1_TIME *time;
+    ASN1_TIME *time = NULL;
     struct tm tm;
+    unsigned long valid_time;
     int ret = 0;
 
+    valid_time = DC_get_valid_time(dc);
     time = ASN1_STRING_dup(X509_get0_notBefore(parent_cert));
     if (time == NULL)
         goto err;
     if (!ASN1_TIME_to_tm(time, &tm))
         goto err;
-    if (ASN1_TIME_adj(time, mktime(&tm), 0, DC_get_valid_time(dc)) == NULL)
+    /*
+     * valid_time is a 32-bit unsigned field in the wire format, but
+     * DC_set_valid_time() accepts any unsigned long. Reject values that
+     * cannot safely convert to long before adding as an offset.
+     */
+    if (valid_time > (unsigned long)LONG_MAX)
+        goto err;
+    /*
+     * Add valid_time on the UTC calendar directly. Do not pass ASN1_TIME_to_tm
+     * fields through mktime(): that interprets them in the local timezone and
+     * can delay the DC expiry check by up to 12 hours on west-of-UTC hosts.
+     */
+    if (!OPENSSL_gmtime_adj(&tm, 0, (long)valid_time))
+        goto err;
+    if (ossl_asn1_time_from_tm(time, &tm, V_ASN1_UNDEF) == NULL)
         goto err;
     if (X509_cmp_time(time, NULL) <= 0)
         goto err;
 
     ret = 1;
-err:
+ err:
     ASN1_STRING_clear_free(time);
     return ret;
 }
