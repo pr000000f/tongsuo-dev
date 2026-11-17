@@ -7,6 +7,8 @@
  * https://github.com/Tongsuo-Project/Tongsuo/blob/master/LICENSE.txt
  */
 
+#include <limits.h>
+#include <string.h>
 #include <openssl/err.h>
 #include <crypto/ec/ec_local.h>
 #include <crypto/zkp/common/zkp_util.h>
@@ -21,11 +23,12 @@ DEFINE_STACK_OF(BP_VARIABLE)
 
 static point_conversion_form_t form = POINT_CONVERSION_COMPRESSED;
 
-static int bp_stack_of_variable_encode(STACK_OF(BP_VARIABLE) *sk, unsigned char *out,
-                                       const EC_GROUP *group, BN_CTX *bn_ctx)
+static size_t bp_stack_of_variable_encode(STACK_OF(BP_VARIABLE) *sk,
+                                          unsigned char *out,
+                                          const EC_GROUP *group, BN_CTX *bn_ctx)
 {
-    int i, n, *q, size;
-    size_t point_len;
+    int i, n, *q;
+    size_t point_len, size, name_len;
     unsigned char *p;
     BP_VARIABLE *V;
 
@@ -35,18 +38,22 @@ static int bp_stack_of_variable_encode(STACK_OF(BP_VARIABLE) *sk, unsigned char 
     point_len = EC_POINT_point2oct(group, EC_GROUP_get0_generator(group),
                                    form, NULL, 0, bn_ctx);
     n = sk_BP_VARIABLE_num(sk);
+    if (n < 0)
+        return 0;
+
     if (out == NULL) {
-        size = sizeof(n) + n * point_len;
+        if (n > 0 && point_len > (SIZE_MAX - sizeof(n)) / (size_t)n)
+            return 0;
+        size = sizeof(n) + (size_t)n * point_len;
         for (i = 0; i < n; i++) {
             V = sk_BP_VARIABLE_value(sk, i);
             if (V == NULL)
-                break;
+                return 0;
 
-            if (V->name != NULL) {
-                size += strlen(V->name);
-            }
-
-            size += 1;
+            name_len = V->name != NULL ? strlen(V->name) : 0;
+            if (name_len > SIZE_MAX - size - 1)
+                return 0;
+            size += name_len + 1;
         }
 
         return size;
@@ -71,12 +78,15 @@ static int bp_stack_of_variable_encode(STACK_OF(BP_VARIABLE) *sk, unsigned char 
             continue;
         }
 
-        strcpy((char *)p, V->name);
-        p += strlen(V->name) + 1;
+        name_len = strlen(V->name);
+        memcpy(p, V->name, name_len + 1);
+        p += name_len + 1;
     }
 
+    return (size_t)(p - out);
+
 end:
-    return p - out;
+    return 0;
 }
 
 static STACK_OF(BP_VARIABLE) *bp_stack_of_variable_decode(const unsigned char *in,
@@ -133,6 +143,8 @@ static STACK_OF(BP_VARIABLE) *bp_stack_of_variable_decode(const unsigned char *i
 
         name_len = OPENSSL_strnlen((const char *)p, left);
         if (name_len == left)
+            goto err;
+        if (name_len > BP_VARIABLE_NAME_MAX_LEN)
             goto err;
 
         name = name_len == 0 ? NULL : (char *)p;
@@ -300,7 +312,7 @@ err:
  */
 size_t BP_PUB_PARAM_encode(const BP_PUB_PARAM *pp, unsigned char *out, size_t size)
 {
-    int *q, sk_len, curve_id;
+    int *q, sk_len, g_len, h_len, curve_id;
     size_t point_len, ret = 0, len;
     unsigned char *p;
     BN_CTX *bn_ctx = NULL;
@@ -324,11 +336,16 @@ size_t BP_PUB_PARAM_encode(const BP_PUB_PARAM *pp, unsigned char *out, size_t si
     point_len = EC_POINT_point2oct(group, EC_GROUP_get0_generator(group),
                                    form, NULL, 0, bn_ctx);
 
-    sk_len = zkp_stack_of_point_encode(pp->sk_G, NULL, group, bn_ctx);
-    if (sk_len == 0)
+    g_len = zkp_stack_of_point_encode(pp->sk_G, NULL, group, bn_ctx);
+    h_len = zkp_stack_of_point_encode(pp->sk_H, NULL, group, bn_ctx);
+    if (g_len == 0 || h_len == 0)
+        goto end;
+    if ((size_t)g_len > SIZE_MAX - (size_t)h_len
+            || (size_t)g_len + (size_t)h_len
+               > SIZE_MAX - (sizeof(int) * 3 + point_len * 2))
         goto end;
 
-    len = sizeof(int) * 3 + point_len * 2 + sk_len * 2;
+    len = sizeof(int) * 3 + point_len * 2 + (size_t)g_len + (size_t)h_len;
     if (out == NULL) {
         ret = len;
         goto end;
@@ -456,6 +473,14 @@ BP_PUB_PARAM *BP_PUB_PARAM_decode(const unsigned char *in, size_t size)
 
     p += sk_len;
 
+    /* G/H must each have gens_capacity * party_capacity points. */
+    if (n > INT_MAX
+            || sk_EC_POINT_num(pp->sk_G) != (int)n
+            || sk_EC_POINT_num(pp->sk_H) != (int)n) {
+        ERR_raise(ERR_LIB_ZKP_BP, ERR_R_PASSED_INVALID_ARGUMENT);
+        goto err;
+    }
+
     EC_GROUP_free(group);
     BN_CTX_free(bn_ctx);
     return pp;
@@ -480,8 +505,8 @@ err:
 size_t BP_WITNESS_encode(const BP_WITNESS *witness, unsigned char *out,
                          size_t size, int flag)
 {
-    int *q, curve_id, bn_len, sk_len;
-    size_t ret = 0, len, n, point_len;
+    int *q, curve_id, bn_len, sk_len, r_len, v_len;
+    size_t ret = 0, len, n, point_len, sk_V_len;
     unsigned char *p;
     BP_VARIABLE *V;
     BN_CTX *bn_ctx = NULL;
@@ -521,16 +546,24 @@ size_t BP_WITNESS_encode(const BP_WITNESS *witness, unsigned char *out,
         goto end;
     }
 
-    if (!(sk_len = bp_stack_of_variable_encode(witness->sk_V, NULL, group, bn_ctx)))
+    sk_V_len = bp_stack_of_variable_encode(witness->sk_V, NULL, group, bn_ctx);
+    if (sk_V_len == 0)
         goto end;
 
-    len = 4 + point_len + sk_len;
-
-    if (!(sk_len = zkp_stack_of_bignum_encode(witness->sk_r, NULL, bn_len)))
+    if (sk_V_len > SIZE_MAX - (4 + point_len))
         goto end;
+    len = 4 + point_len + sk_V_len;
 
-    if (flag == 1)
-        len += sk_len * 2;
+    if (flag == 1) {
+        r_len = zkp_stack_of_bignum_encode(witness->sk_r, NULL, bn_len);
+        v_len = zkp_stack_of_bignum_encode(witness->sk_v, NULL, bn_len);
+        if (r_len == 0 || v_len == 0)
+            goto end;
+        if ((size_t)r_len > SIZE_MAX - (size_t)v_len
+                || (size_t)r_len + (size_t)v_len > SIZE_MAX - len)
+            goto end;
+        len += (size_t)r_len + (size_t)v_len;
+    }
 
     if (out == NULL) {
         ret = len;
@@ -551,10 +584,11 @@ size_t BP_WITNESS_encode(const BP_WITNESS *witness, unsigned char *out,
 
     p += point_len;
 
-    if (!(sk_len = bp_stack_of_variable_encode(witness->sk_V, p, group, bn_ctx)))
+    sk_V_len = bp_stack_of_variable_encode(witness->sk_V, p, group, bn_ctx);
+    if (sk_V_len == 0)
         goto end;
 
-    p += sk_len;
+    p += sk_V_len;
 
     if (flag == 1) {
         if (!(sk_len = zkp_stack_of_bignum_encode(witness->sk_r, p, bn_len)))
@@ -655,6 +689,12 @@ BP_WITNESS *BP_WITNESS_decode(const unsigned char *in, size_t size, int flag)
             goto err;
 
         p += sk_len;
+
+        if (witness->sk_r == NULL || witness->sk_v == NULL
+                || sk_BIGNUM_num(witness->sk_r) != sk_BIGNUM_num(witness->sk_v)) {
+            ERR_raise(ERR_LIB_ZKP_BP, ERR_R_PASSED_INVALID_ARGUMENT);
+            goto err;
+        }
     }
 
     witness->group = group;

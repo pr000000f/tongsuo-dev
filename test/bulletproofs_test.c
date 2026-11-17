@@ -9,10 +9,15 @@
 
 #include "internal/deprecated.h"
 #include "testutil.h"
+#include <string.h>
 #include <openssl/conf.h>
 #include <openssl/opensslconf.h>
 #include <openssl/bulletproofs.h>
+#include "crypto/zkp/bulletproofs/bulletproofs.h"
 #include "crypto/zkp/bulletproofs/r1cs.h"
+
+DEFINE_STACK_OF(EC_POINT)
+DEFINE_STACK_OF(BIGNUM)
 
 typedef struct bp_r1cs_example_linaer_combinations_st {
     BP_R1CS_LINEAR_COMBINATION *a1;
@@ -1463,10 +1468,167 @@ static int range_proof_encode_tests(void)
     return 1;
 }
 
+/*
+ * Decode must reject PubParam blobs whose G/H stack counts differ
+ * (2993397: encode used to size from G only then write both stacks).
+ */
+static int test_pp_decode_rejects_unequal_GH(void)
+{
+    BP_PUB_PARAM *pp = NULL, *bad = NULL;
+    EC_POINT *extra = NULL;
+    unsigned char *bin = NULL;
+    size_t size;
+    int ret = 0;
+
+    if (!TEST_ptr(pp = BP_PUB_PARAM_new_by_curve_id(NID_secp256k1, 1, 1))
+            || !TEST_ptr(extra = EC_POINT_dup(sk_EC_POINT_value(pp->sk_H, 0),
+                                               pp->group))
+            || !TEST_true(sk_EC_POINT_push(pp->sk_H, extra)))
+        goto err;
+    extra = NULL; /* owned by sk_H */
+
+    size = BP_PUB_PARAM_encode(pp, NULL, 0);
+    if (!TEST_size_t_gt(size, 0)
+            || !TEST_ptr(bin = OPENSSL_zalloc(size))
+            || !TEST_size_t_eq(BP_PUB_PARAM_encode(pp, bin, size), size))
+        goto err;
+
+    if (!TEST_ptr_null(bad = BP_PUB_PARAM_decode(bin, size)))
+        goto err;
+
+    ret = 1;
+ err:
+    EC_POINT_free(extra);
+    BP_PUB_PARAM_free(bad);
+    BP_PUB_PARAM_free(pp);
+    OPENSSL_free(bin);
+    return ret;
+}
+
+/*
+ * Long-format witness decode must reject |sk_r| != |sk_v| (2995953).
+ */
+static int test_witness_decode_rejects_unequal_rv(void)
+{
+    BP_PUB_PARAM *pp = NULL;
+    BP_WITNESS *witness = NULL, *bad = NULL;
+    BIGNUM *v = NULL, *extra = NULL;
+    unsigned char *bin = NULL;
+    size_t size;
+    int ret = 0;
+
+    if (!TEST_ptr(pp = BP_PUB_PARAM_new_by_curve_id(NID_secp256k1, 8, 1))
+            || !TEST_ptr(witness = BP_WITNESS_new(pp))
+            || !TEST_ptr(v = BN_new())
+            || !TEST_true(BN_set_word(v, 7))
+            || !TEST_true(BP_WITNESS_commit(witness, "x", v))
+            || !TEST_ptr(extra = BN_dup(v))
+            || !TEST_true(sk_BIGNUM_push(witness->sk_v, extra)))
+        goto err;
+    extra = NULL; /* owned by sk_v */
+
+    size = BP_WITNESS_encode(witness, NULL, 0, 1);
+    if (!TEST_size_t_gt(size, 0)
+            || !TEST_ptr(bin = OPENSSL_zalloc(size))
+            || !TEST_size_t_eq(BP_WITNESS_encode(witness, bin, size, 1), size))
+        goto err;
+
+    if (!TEST_ptr_null(bad = BP_WITNESS_decode(bin, size, 1)))
+        goto err;
+
+    ret = 1;
+ err:
+    BN_free(extra);
+    BP_WITNESS_free(bad);
+    BP_WITNESS_free(witness);
+    BP_PUB_PARAM_free(pp);
+    BN_free(v);
+    OPENSSL_free(bin);
+    return ret;
+}
+
+/*
+ * Variable names longer than BP_VARIABLE_NAME_MAX_LEN must be rejected
+ * on decode (2995876); the max length itself must still be accepted.
+ */
+static int test_witness_decode_rejects_long_varname(void)
+{
+    BP_PUB_PARAM *pp = NULL;
+    BP_WITNESS *witness = NULL, *decoded = NULL;
+    BIGNUM *v = NULL;
+    unsigned char *bin = NULL, *mal = NULL;
+    char name16[BP_VARIABLE_NAME_MAX_LEN + 1];
+    char name17[BP_VARIABLE_NAME_MAX_LEN + 2];
+    size_t size, point_len, name_off, mal_size, old_name_len, i;
+    int ret = 0;
+
+    memset(name16, 'a', BP_VARIABLE_NAME_MAX_LEN);
+    name16[BP_VARIABLE_NAME_MAX_LEN] = '\0';
+    memset(name17, 'b', BP_VARIABLE_NAME_MAX_LEN + 1);
+    name17[BP_VARIABLE_NAME_MAX_LEN + 1] = '\0';
+
+    if (!TEST_ptr(pp = BP_PUB_PARAM_new_by_curve_id(NID_secp256k1, 8, 1))
+            || !TEST_ptr(witness = BP_WITNESS_new(pp))
+            || !TEST_ptr(v = BN_new())
+            || !TEST_true(BN_set_word(v, 1))
+            || !TEST_true(BP_WITNESS_commit(witness, name16, v)))
+        goto err;
+
+    size = BP_WITNESS_encode(witness, NULL, 0, 0);
+    if (!TEST_size_t_gt(size, 0)
+            || !TEST_ptr(bin = OPENSSL_zalloc(size))
+            || !TEST_size_t_eq(BP_WITNESS_encode(witness, bin, size, 0), size))
+        goto err;
+
+    /* Boundary: name of length MAX must decode. */
+    if (!TEST_ptr(decoded = BP_WITNESS_decode(bin, size, 0)))
+        goto err;
+    BP_WITNESS_free(decoded);
+    decoded = NULL;
+
+    point_len = (EC_GROUP_get_degree(pp->group) + 7) / 8 + 1; /* compressed */
+    /*
+     * Layout: curve_id | H | [n | point | name\0 | ...].
+     * Single variable: name starts after curve_id + H + count + point.
+     */
+    name_off = sizeof(int) + point_len + sizeof(int) + point_len;
+    old_name_len = BP_VARIABLE_NAME_MAX_LEN;
+    if (!TEST_size_t_lt(name_off + old_name_len, size))
+        goto err;
+
+    mal_size = size + 1; /* one extra name byte */
+    if (!TEST_ptr(mal = OPENSSL_zalloc(mal_size)))
+        goto err;
+    memcpy(mal, bin, name_off);
+    for (i = 0; i < old_name_len + 1; i++)
+        mal[name_off + i] = name17[i];
+    mal[name_off + old_name_len + 1] = '\0';
+    if (name_off + old_name_len + 1 < size)
+        memcpy(mal + name_off + old_name_len + 2,
+               bin + name_off + old_name_len + 1,
+               size - (name_off + old_name_len + 1));
+
+    if (!TEST_ptr_null(decoded = BP_WITNESS_decode(mal, mal_size, 0)))
+        goto err;
+
+    ret = 1;
+ err:
+    BP_WITNESS_free(decoded);
+    BP_WITNESS_free(witness);
+    BP_PUB_PARAM_free(pp);
+    BN_free(v);
+    OPENSSL_free(bin);
+    OPENSSL_free(mal);
+    return ret;
+}
+
 int setup_tests(void)
 {
     ADD_TEST(range_proof_tests);
     ADD_TEST(range_proof_encode_tests);
+    ADD_TEST(test_pp_decode_rejects_unequal_GH);
+    ADD_TEST(test_witness_decode_rejects_unequal_rv);
+    ADD_TEST(test_witness_decode_rejects_long_varname);
     ADD_TEST(r1cs_range_tests);
     ADD_TEST(r1cs_proof_test1_should_ok);
     ADD_TEST(r1cs_proof_test1_should_failed);
