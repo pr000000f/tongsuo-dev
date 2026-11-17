@@ -1131,8 +1131,15 @@ int setup_tests(void)
     ADD_TEST(test_verify_popo_crmf_ec_infinity);
 # endif
 # ifndef OPENSSL_NO_DSA
-    ADD_TEST(test_pubkey_check_rejects_dsa_y1);
-    ADD_TEST(test_verify_popo_crmf_dsa_y1);
+    /*
+     * Pedantic FIPS sets dsa-sign-disabled, so DSA paramgen cannot build
+     * this fixture. Keep the checks on the default provider.
+     */
+    if (provider == NULL
+            || strcmp(OSSL_PROVIDER_get0_name(provider), "fips") != 0) {
+        ADD_TEST(test_pubkey_check_rejects_dsa_y1);
+        ADD_TEST(test_verify_popo_crmf_dsa_y1);
+    }
 # endif
 #endif
     ADD_TEST(test_validate_msg_signature_trusted_ok);
