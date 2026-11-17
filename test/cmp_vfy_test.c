@@ -11,6 +11,10 @@
 
 #include "helpers/cmp_testlib.h"
 #include "../crypto/crmf/crmf_local.h" /* for manipulating POPO signature */
+#include "crypto/x509.h"
+#include <openssl/core_names.h>
+#include <openssl/param_build.h>
+#include <openssl/params.h>
 
 static const char *server_f;
 static const char *client_f;
@@ -128,6 +132,398 @@ static int test_verify_popo_bad(void)
     fixture->expected = 0;
     EXECUTE_TEST(execute_verify_popo_test, tear_down);
     return result;
+}
+#endif
+
+/* RSA public key with e=1 (signature forgeable without a private key). */
+static EVP_PKEY *make_e1_pkey(OSSL_LIB_CTX *ctx)
+{
+    EVP_PKEY_CTX *gctx = NULL, *fctx = NULL;
+    EVP_PKEY *key = NULL, *e1 = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    OSSL_PARAM *params = NULL;
+    BIGNUM *n = NULL, *e = NULL;
+    unsigned char one = 1;
+
+    if (!TEST_ptr(gctx = EVP_PKEY_CTX_new_from_name(ctx, "RSA", NULL))
+            || !TEST_int_gt(EVP_PKEY_keygen_init(gctx), 0)
+            || !TEST_int_gt(EVP_PKEY_CTX_set_rsa_keygen_bits(gctx, 2048), 0)
+            || !TEST_int_gt(EVP_PKEY_keygen(gctx, &key), 0)
+            || !TEST_true(EVP_PKEY_get_bn_param(key, OSSL_PKEY_PARAM_RSA_N, &n))
+            || !TEST_ptr(e = BN_bin2bn(&one, 1, NULL))
+            || !TEST_ptr(bld = OSSL_PARAM_BLD_new())
+            || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_N, n))
+            || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_RSA_E, e))
+            || !TEST_ptr(params = OSSL_PARAM_BLD_to_param(bld))
+            || !TEST_ptr(fctx = EVP_PKEY_CTX_new_from_name(ctx, "RSA", NULL))
+            || !TEST_int_gt(EVP_PKEY_fromdata_init(fctx), 0)
+            || !TEST_int_gt(EVP_PKEY_fromdata(fctx, &e1, EVP_PKEY_PUBLIC_KEY,
+                                              params), 0))
+        goto err;
+
+    EVP_PKEY_free(key);
+    key = NULL;
+
+ err:
+    BN_free(n);
+    BN_free(e);
+    OSSL_PARAM_free(params);
+    OSSL_PARAM_BLD_free(bld);
+    EVP_PKEY_CTX_free(gctx);
+    EVP_PKEY_CTX_free(fctx);
+    EVP_PKEY_free(key);
+    return e1;
+}
+
+/* PKCS#1 v1.5 encoding of the SHA-256 digest of |tbs| for a k byte modulus. */
+static ASN1_BIT_STRING *forge_pkcs1_sig(const unsigned char *tbs, size_t tbslen,
+                                        int k)
+{
+    static const unsigned char digestinfo[] = {
+        0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01,
+        0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20
+    };
+    unsigned char md[EVP_MAX_MD_SIZE];
+    unsigned int mdlen = 0;
+    unsigned char *em = NULL;
+    ASN1_BIT_STRING *sig = NULL;
+    size_t dlen;
+    size_t i;
+
+    if (!TEST_true(EVP_Digest(tbs, tbslen, md, &mdlen, EVP_sha256(), NULL)))
+        return NULL;
+    dlen = sizeof(digestinfo) + mdlen;
+    if (!TEST_size_t_gt((size_t)k, dlen + 11)
+            || !TEST_ptr(em = OPENSSL_malloc(k)))
+        return NULL;
+    em[0] = 0x00;
+    em[1] = 0x01;
+    for (i = 2; i < (size_t)k - dlen - 1; i++)
+        em[i] = 0xff;
+    em[k - dlen - 1] = 0x00;
+    memcpy(em + k - dlen, digestinfo, sizeof(digestinfo));
+    memcpy(em + k - mdlen, md, mdlen);
+
+    if ((sig = ASN1_BIT_STRING_new()) == NULL
+            || !TEST_true(ASN1_BIT_STRING_set(sig, em, (int)k))) {
+        ASN1_BIT_STRING_free(sig);
+        sig = NULL;
+    }
+    OPENSSL_free(em);
+    return sig;
+}
+
+static X509_ALGOR *sha256_rsa_alg(void)
+{
+    X509_ALGOR *alg = X509_ALGOR_new();
+
+    if (alg != NULL
+            && !X509_ALGOR_set0(alg, OBJ_nid2obj(NID_sha256WithRSAEncryption),
+                                V_ASN1_NULL, NULL)) {
+        X509_ALGOR_free(alg);
+        alg = NULL;
+    }
+    return alg;
+}
+
+static X509_NAME *test_subject(void)
+{
+    X509_NAME *name = X509_NAME_new();
+
+    if (name != NULL
+            && !X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+                                           (const unsigned char *)"e1", -1, -1,
+                                           0)) {
+        X509_NAME_free(name);
+        name = NULL;
+    }
+    return name;
+}
+
+/* IR with e=1 template key and a verifying (forged) PoP signature. */
+static int test_verify_popo_crmf_bad_pubkey(void)
+{
+    OSSL_CMP_MSG *msg = NULL;
+    OSSL_CMP_CTX *ctx = NULL;
+    OSSL_CRMF_MSG *crm = NULL;
+    OSSL_CRMF_CERTTEMPLATE *tmpl;
+    OSSL_CRMF_POPOSIGNINGKEY *sig;
+    X509_NAME *name = NULL;
+    X509_ALGOR *alg = NULL;
+    EVP_PKEY *pkey = NULL;
+    unsigned char *tbs = NULL;
+    int tbslen, k, res = 0;
+
+    if (!TEST_ptr(pkey = make_e1_pkey(libctx))
+            || !TEST_ptr(ctx = OSSL_CMP_CTX_new(libctx, NULL))
+            || !TEST_ptr(msg = OSSL_CMP_MSG_new(libctx, NULL))
+            || !TEST_true(ossl_cmp_msg_set_bodytype(msg, OSSL_CMP_PKIBODY_IR))
+            || !TEST_ptr(msg->body->value.ir = OSSL_CRMF_MSGS_new())
+            || !TEST_ptr(crm = OSSL_CRMF_MSG_new())
+            || !TEST_true(sk_OSSL_CRMF_MSG_push(msg->body->value.ir, crm)))
+        goto err;
+    tmpl = OSSL_CRMF_MSG_get0_tmpl(crm);
+    if (!TEST_ptr(tmpl) || !TEST_ptr(name = test_subject())
+            || !TEST_true(OSSL_CRMF_CERTTEMPLATE_fill(tmpl, pkey, name, NULL,
+                                                      NULL)))
+        goto err;
+
+    tbslen = ASN1_item_i2d((const ASN1_VALUE *)crm->certReq, &tbs,
+                           ASN1_ITEM_rptr(OSSL_CRMF_CERTREQUEST));
+    k = EVP_PKEY_get_size(pkey);
+    if (!TEST_int_gt(tbslen, 0) || !TEST_ptr(alg = sha256_rsa_alg())
+            || !TEST_ptr(sig = OSSL_CRMF_POPOSIGNINGKEY_new()))
+        goto err;
+    crm->popo = OSSL_CRMF_POPO_new();
+    if (!TEST_ptr(crm->popo))
+        goto err;
+    crm->popo->type = OSSL_CRMF_POPO_SIGNATURE;
+    crm->popo->value.signature = sig;
+    sig->algorithmIdentifier = alg;
+    alg = NULL;
+    if (!TEST_ptr(sig->signature = forge_pkcs1_sig(tbs, (size_t)tbslen, k)))
+        goto err;
+
+    /* Sanity: the forged signature verifies without a private key. */
+    if (!TEST_int_eq(ASN1_item_verify_ex(ASN1_ITEM_rptr(OSSL_CRMF_CERTREQUEST),
+                                         sig->algorithmIdentifier, sig->signature,
+                                         crm->certReq, NULL, pkey, libctx, NULL),
+                     1))
+        goto err;
+
+    res = TEST_int_eq(ossl_cmp_verify_popo(ctx, msg, 0), 0);
+
+ err:
+    OSSL_CMP_CTX_free(ctx);
+    OPENSSL_free(tbs);
+    X509_NAME_free(name);
+    X509_ALGOR_free(alg);
+    EVP_PKEY_free(pkey);
+    OSSL_CMP_MSG_free(msg);
+    return res;
+}
+
+/* P10CR with e=1 key and a verifying (forged) CSR signature. */
+static int test_verify_popo_p10cr_bad_pubkey(void)
+{
+    OSSL_CMP_MSG *msg = NULL;
+    OSSL_CMP_CTX *ctx = NULL;
+    X509_REQ *req = NULL;
+    X509_NAME *name = NULL;
+    X509_ALGOR *alg = NULL;
+    ASN1_BIT_STRING *sig = NULL;
+    EVP_PKEY *pkey = NULL;
+    unsigned char *tbs = NULL;
+    int tbslen, k, res = 0;
+
+    if (!TEST_ptr(pkey = make_e1_pkey(libctx))
+            || !TEST_ptr(ctx = OSSL_CMP_CTX_new(libctx, NULL))
+            || !TEST_ptr(req = X509_REQ_new())
+            || !TEST_int_gt(X509_REQ_set_version(req, 0), 0)
+            || !TEST_ptr(name = test_subject())
+            || !TEST_true(X509_REQ_set_subject_name(req, name))
+            || !TEST_true(X509_REQ_set_pubkey(req, pkey))
+            || !TEST_ptr(alg = sha256_rsa_alg())
+            || !TEST_true(X509_REQ_set1_signature_algo(req, alg)))
+        goto err;
+
+    tbslen = i2d_re_X509_REQ_tbs(req, &tbs);
+    k = EVP_PKEY_get_size(pkey);
+    if (!TEST_int_gt(tbslen, 0)
+            || !TEST_ptr(sig = forge_pkcs1_sig(tbs, (size_t)tbslen, k)))
+        goto err;
+    X509_REQ_set0_signature(req, sig);
+    sig = NULL;
+
+    if (!TEST_int_eq(X509_REQ_verify_ex(req, pkey, libctx, NULL), 1))
+        goto err;
+
+    if (!TEST_ptr(msg = OSSL_CMP_MSG_new(libctx, NULL))
+            || !TEST_true(ossl_cmp_msg_set_bodytype(msg, OSSL_CMP_PKIBODY_P10CR))
+            || !TEST_ptr(msg->body->value.p10cr = X509_REQ_dup(req)))
+        goto err;
+
+    res = TEST_int_eq(ossl_cmp_verify_popo(ctx, msg, 0), 0);
+
+ err:
+    OSSL_CMP_CTX_free(ctx);
+    OPENSSL_free(tbs);
+    ASN1_BIT_STRING_free(sig);
+    X509_ALGOR_free(alg);
+    X509_NAME_free(name);
+    X509_REQ_free(req);
+    EVP_PKEY_free(pkey);
+    OSSL_CMP_MSG_free(msg);
+    return res;
+}
+
+/* IR with |pkey| and RAVerified PoP; pubkey check must still reject. */
+static int verify_popo_rejects_bad_crmf_pubkey(EVP_PKEY *pkey)
+{
+    OSSL_CMP_MSG *msg = NULL;
+    OSSL_CMP_CTX *ctx = NULL;
+    OSSL_CRMF_MSG *crm = NULL;
+    OSSL_CRMF_CERTTEMPLATE *tmpl;
+    X509_NAME *name = NULL;
+    int res = 0;
+
+    if (!TEST_ptr(pkey)
+            || !TEST_ptr(ctx = OSSL_CMP_CTX_new(libctx, NULL))
+            || !TEST_ptr(msg = OSSL_CMP_MSG_new(libctx, NULL))
+            || !TEST_true(ossl_cmp_msg_set_bodytype(msg, OSSL_CMP_PKIBODY_IR))
+            || !TEST_ptr(msg->body->value.ir = OSSL_CRMF_MSGS_new())
+            || !TEST_ptr(crm = OSSL_CRMF_MSG_new())
+            || !TEST_true(sk_OSSL_CRMF_MSG_push(msg->body->value.ir, crm)))
+        goto err;
+    tmpl = OSSL_CRMF_MSG_get0_tmpl(crm);
+    if (!TEST_ptr(tmpl) || !TEST_ptr(name = test_subject())
+            || !TEST_true(OSSL_CRMF_CERTTEMPLATE_fill(tmpl, pkey, name, NULL,
+                                                      NULL)))
+        goto err;
+
+    crm->popo = OSSL_CRMF_POPO_new();
+    if (!TEST_ptr(crm->popo))
+        goto err;
+    crm->popo->type = OSSL_CRMF_POPO_RAVERIFIED;
+
+    res = TEST_int_eq(ossl_cmp_verify_popo(ctx, msg, 1 /* acceptRAVerified */),
+                      0);
+
+ err:
+    OSSL_CMP_CTX_free(ctx);
+    X509_NAME_free(name);
+    OSSL_CMP_MSG_free(msg);
+    return res;
+}
+
+#ifndef OPENSSL_NO_EC
+/* EC public key at infinity (SEC1 0x00), via fromdata. */
+static EVP_PKEY *make_ec_infinity_pkey(void)
+{
+    EVP_PKEY_CTX *fctx = NULL;
+    EVP_PKEY *pkey = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    OSSL_PARAM *params = NULL;
+    unsigned char inf = 0x00;
+
+    if (!TEST_ptr(bld = OSSL_PARAM_BLD_new())
+            || !TEST_true(OSSL_PARAM_BLD_push_utf8_string(bld,
+                                                          OSSL_PKEY_PARAM_GROUP_NAME,
+                                                          "P-256", 0))
+            || !TEST_true(OSSL_PARAM_BLD_push_octet_string(bld,
+                                                           OSSL_PKEY_PARAM_PUB_KEY,
+                                                           &inf, 1))
+            || !TEST_ptr(params = OSSL_PARAM_BLD_to_param(bld))
+            || !TEST_ptr(fctx = EVP_PKEY_CTX_new_from_name(libctx, "EC", NULL))
+            || !TEST_int_gt(EVP_PKEY_fromdata_init(fctx), 0)
+            || !TEST_int_gt(EVP_PKEY_fromdata(fctx, &pkey, EVP_PKEY_PUBLIC_KEY,
+                                              params), 0)) {
+        EVP_PKEY_free(pkey);
+        pkey = NULL;
+    }
+
+    OSSL_PARAM_free(params);
+    OSSL_PARAM_BLD_free(bld);
+    EVP_PKEY_CTX_free(fctx);
+    return pkey;
+}
+
+static int test_pubkey_check_rejects_ec_infinity(void)
+{
+    EVP_PKEY *pkey = NULL;
+    int res = 0;
+
+    if (!TEST_ptr(pkey = make_ec_infinity_pkey()))
+        return 0;
+    res = TEST_false(ossl_x509_pubkey_check_public(pkey, libctx, NULL));
+    EVP_PKEY_free(pkey);
+    return res;
+}
+
+static int test_verify_popo_crmf_ec_infinity(void)
+{
+    EVP_PKEY *pkey = NULL;
+    int res = 0;
+
+    if (!TEST_ptr(pkey = make_ec_infinity_pkey()))
+        return 0;
+    res = verify_popo_rejects_bad_crmf_pubkey(pkey);
+    EVP_PKEY_free(pkey);
+    return res;
+}
+#endif
+
+#ifndef OPENSSL_NO_DSA
+/* DSA public key with y=1 (FFC validation requires y >= 2). */
+static EVP_PKEY *make_dsa_y1_pkey(void)
+{
+    EVP_PKEY_CTX *gctx = NULL, *fctx = NULL;
+    EVP_PKEY *params = NULL, *pkey = NULL;
+    OSSL_PARAM_BLD *bld = NULL;
+    OSSL_PARAM *from = NULL;
+    BIGNUM *p = NULL, *q = NULL, *g = NULL, *y = NULL;
+    unsigned char one = 1;
+
+    if (!TEST_ptr(gctx = EVP_PKEY_CTX_new_from_name(libctx, "DSA", NULL))
+            || !TEST_int_gt(EVP_PKEY_paramgen_init(gctx), 0)
+            || !TEST_int_gt(EVP_PKEY_CTX_set_dsa_paramgen_bits(gctx, 2048), 0)
+            || !TEST_int_gt(EVP_PKEY_paramgen(gctx, &params), 0)
+            || !TEST_true(EVP_PKEY_get_bn_param(params, OSSL_PKEY_PARAM_FFC_P,
+                                                &p))
+            || !TEST_true(EVP_PKEY_get_bn_param(params, OSSL_PKEY_PARAM_FFC_Q,
+                                                &q))
+            || !TEST_true(EVP_PKEY_get_bn_param(params, OSSL_PKEY_PARAM_FFC_G,
+                                                &g))
+            || !TEST_ptr(y = BN_bin2bn(&one, 1, NULL))
+            || !TEST_ptr(bld = OSSL_PARAM_BLD_new())
+            || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_P, p))
+            || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_Q, q))
+            || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_FFC_G, g))
+            || !TEST_true(OSSL_PARAM_BLD_push_BN(bld, OSSL_PKEY_PARAM_PUB_KEY,
+                                                 y))
+            || !TEST_ptr(from = OSSL_PARAM_BLD_to_param(bld))
+            || !TEST_ptr(fctx = EVP_PKEY_CTX_new_from_name(libctx, "DSA", NULL))
+            || !TEST_int_gt(EVP_PKEY_fromdata_init(fctx), 0)
+            || !TEST_int_gt(EVP_PKEY_fromdata(fctx, &pkey, EVP_PKEY_PUBLIC_KEY,
+                                              from), 0)) {
+        EVP_PKEY_free(pkey);
+        pkey = NULL;
+    }
+
+    BN_free(p);
+    BN_free(q);
+    BN_free(g);
+    BN_free(y);
+    OSSL_PARAM_free(from);
+    OSSL_PARAM_BLD_free(bld);
+    EVP_PKEY_CTX_free(gctx);
+    EVP_PKEY_CTX_free(fctx);
+    EVP_PKEY_free(params);
+    return pkey;
+}
+
+static int test_pubkey_check_rejects_dsa_y1(void)
+{
+    EVP_PKEY *pkey = NULL;
+    int res = 0;
+
+    if (!TEST_ptr(pkey = make_dsa_y1_pkey()))
+        return 0;
+    res = TEST_false(ossl_x509_pubkey_check_public(pkey, libctx, NULL));
+    EVP_PKEY_free(pkey);
+    return res;
+}
+
+static int test_verify_popo_crmf_dsa_y1(void)
+{
+    EVP_PKEY *pkey = NULL;
+    int res = 0;
+
+    if (!TEST_ptr(pkey = make_dsa_y1_pkey()))
+        return 0;
+    res = verify_popo_rejects_bad_crmf_pubkey(pkey);
+    EVP_PKEY_free(pkey);
+    return res;
 }
 #endif
 
@@ -717,6 +1113,16 @@ int setup_tests(void)
     ADD_TEST(test_verify_popo);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     ADD_TEST(test_verify_popo_bad);
+    ADD_TEST(test_verify_popo_crmf_bad_pubkey);
+    ADD_TEST(test_verify_popo_p10cr_bad_pubkey);
+# ifndef OPENSSL_NO_EC
+    ADD_TEST(test_pubkey_check_rejects_ec_infinity);
+    ADD_TEST(test_verify_popo_crmf_ec_infinity);
+# endif
+# ifndef OPENSSL_NO_DSA
+    ADD_TEST(test_pubkey_check_rejects_dsa_y1);
+    ADD_TEST(test_verify_popo_crmf_dsa_y1);
+# endif
 #endif
     ADD_TEST(test_validate_msg_signature_trusted_ok);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION

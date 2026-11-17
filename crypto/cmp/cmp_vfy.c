@@ -878,6 +878,39 @@ int ossl_cmp_msg_check_update(OSSL_CMP_CTX *ctx, const OSSL_CMP_MSG *msg,
     return 1;
 }
 
+/* Validate CRMF template public keys before PoP (reject e.g. RSA e=1). */
+static int crmf_template_pubkey_ok(const OSSL_CMP_CTX *ctx,
+                                   const OSSL_CRMF_MSGS *reqs)
+{
+    int i;
+
+    if (reqs == NULL)
+        return 0;
+
+    for (i = 0; i < sk_OSSL_CRMF_MSG_num(reqs); i++) {
+        const OSSL_CRMF_MSG *crm = sk_OSSL_CRMF_MSG_value(reqs, i);
+        const OSSL_CRMF_CERTTEMPLATE *tmpl;
+        X509_PUBKEY *pubkey;
+        EVP_PKEY *pkey;
+
+        if (crm == NULL || (tmpl = OSSL_CRMF_MSG_get0_tmpl(crm)) == NULL) {
+            ERR_raise(ERR_LIB_CMP, CMP_R_CERTREQMSG_NOT_FOUND);
+            return 0;
+        }
+        pubkey = OSSL_CRMF_CERTTEMPLATE_get0_publicKey(tmpl);
+        /* Absent key: central keygen; PoP path rejects missing key later. */
+        if (pubkey == NULL)
+            continue;
+        if ((pkey = X509_PUBKEY_get0(pubkey)) == NULL)
+            return 0;
+        if (!ossl_x509_pubkey_check_public(pkey, ctx->libctx, ctx->propq)) {
+            ERR_raise(ERR_LIB_CMP, CMP_R_REQUEST_NOT_ACCEPTED);
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int ossl_cmp_verify_popo(const OSSL_CMP_CTX *ctx,
                          const OSSL_CMP_MSG *msg, int acceptRAVerified)
 {
@@ -888,6 +921,14 @@ int ossl_cmp_verify_popo(const OSSL_CMP_CTX *ctx,
         {
             X509_REQ *req = msg->body->value.p10cr;
 
+            /* Reject unusable keys before verifying the CSR self-signature. */
+            if (!ossl_x509_pubkey_check_public(X509_REQ_get0_pubkey(req),
+                                               ctx->libctx, ctx->propq)) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+                ERR_raise(ERR_LIB_CMP, CMP_R_REQUEST_NOT_ACCEPTED);
+                return 0;
+#endif
+            }
             if (X509_REQ_verify_ex(req, X509_REQ_get0_pubkey(req), ctx->libctx,
                                    ctx->propq) <= 0) {
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
@@ -900,6 +941,11 @@ int ossl_cmp_verify_popo(const OSSL_CMP_CTX *ctx,
     case OSSL_CMP_PKIBODY_IR:
     case OSSL_CMP_PKIBODY_CR:
     case OSSL_CMP_PKIBODY_KUR:
+        if (!crmf_template_pubkey_ok(ctx, msg->body->value.ir)) {
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+            return 0;
+#endif
+        }
         if (!OSSL_CRMF_MSGS_verify_popo(msg->body->value.ir, OSSL_CMP_CERTREQID,
                                         acceptRAVerified,
                                         ctx->libctx, ctx->propq)) {

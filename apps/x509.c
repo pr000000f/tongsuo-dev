@@ -801,6 +801,20 @@ int x509_main(int argc, char **argv)
             BIO_printf(bio_err, "Error unpacking public key from CSR\n");
             goto err;
         }
+        /* Reject unusable keys (e.g. RSA e=1) before verifying the self-signature. */
+        {
+            EVP_PKEY_CTX *pctx = EVP_PKEY_CTX_new_from_pkey(app_get0_libctx(),
+                                                           pkey, app_get0_propq());
+            int pok = pctx != NULL && EVP_PKEY_public_check(pctx) == 1;
+
+            EVP_PKEY_CTX_free(pctx);
+            if (!pok) {
+                BIO_printf(bio_err,
+                           "certificate request: public key is not valid\n");
+                ERR_clear_error();
+                goto err;
+            }
+        }
         i = do_X509_REQ_verify(req, pkey, vfyopts);
         if (i <= 0) {
             BIO_printf(bio_err, i < 0

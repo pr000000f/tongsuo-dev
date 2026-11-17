@@ -1379,6 +1379,22 @@ static char *lookup_conf(const CONF *conf, const char *section, const char *tag)
     return entry;
 }
 
+/* Reject unusable keys (e.g. RSA e=1); uses public EVP API only. */
+static int pkey_public_ok(EVP_PKEY *pkey)
+{
+    EVP_PKEY_CTX *ctx;
+    int ok;
+
+    if (pkey == NULL)
+        return 0;
+    ctx = EVP_PKEY_CTX_new_from_pkey(app_get0_libctx(), pkey, app_get0_propq());
+    if (ctx == NULL)
+        return 0;
+    ok = EVP_PKEY_public_check(ctx) == 1;
+    EVP_PKEY_CTX_free(ctx);
+    return ok;
+}
+
 static int certify(X509 **xret, const char *infile, int informat,
                    EVP_PKEY *pkey, X509 *x509,
                    const char *dgst,
@@ -1412,6 +1428,12 @@ static int certify(X509 **xret, const char *infile, int informat,
     if (selfsign && !X509_REQ_check_private_key(req, pkey)) {
         BIO_printf(bio_err,
                    "Certificate request and CA private key do not match\n");
+        goto end;
+    }
+    /* Reject unusable keys (e.g. RSA e=1) before verifying the self-signature. */
+    if (!pkey_public_ok(pktmp)) {
+        BIO_printf(bio_err, "certificate request: public key is not valid\n");
+        ERR_clear_error();
         goto end;
     }
     i = do_X509_REQ_verify(req, pktmp, vfyopts);
@@ -1464,6 +1486,12 @@ static int certify_cert(X509 **xret, const char *infile, int certformat,
 
     if ((pktmp = X509_get0_pubkey(template_cert)) == NULL) {
         BIO_printf(bio_err, "error unpacking public key\n");
+        goto end;
+    }
+    /* Same as certify(): reject unusable public keys first. */
+    if (!pkey_public_ok(pktmp)) {
+        BIO_printf(bio_err, "template certificate: public key is not valid\n");
+        ERR_clear_error();
         goto end;
     }
     i = do_X509_verify(template_cert, pktmp, vfyopts);
@@ -2108,6 +2136,13 @@ static int certify_spkac(X509 **xret, const char *infile, EVP_PKEY *pkey,
 
     if ((pktmp = NETSCAPE_SPKI_get_pubkey(spki)) == NULL) {
         BIO_printf(bio_err, "error unpacking SPKAC public key\n");
+        goto end;
+    }
+    /* Same as certify(): reject unusable public keys first. */
+    if (!pkey_public_ok(pktmp)) {
+        BIO_printf(bio_err, "SPKAC: public key is not valid\n");
+        ERR_clear_error();
+        EVP_PKEY_free(pktmp);
         goto end;
     }
 

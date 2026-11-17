@@ -1084,3 +1084,24 @@ int ossl_x509_PUBKEY_get0_libctx(OSSL_LIB_CTX **plibctx, const char **ppropq,
         *ppropq = key->propq;
     return 1;
 }
+
+/* Returns 1 only if EVP_PKEY_public_check succeeds; otherwise 0. */
+int ossl_x509_pubkey_check_public(EVP_PKEY *pkey, OSSL_LIB_CTX *libctx,
+                                  const char *propq)
+{
+    EVP_PKEY_CTX *pctx;
+    int ret;
+
+    if (pkey == NULL)
+        return 0;
+
+    pctx = EVP_PKEY_CTX_new_from_pkey(libctx, pkey, propq);
+    if (pctx == NULL)
+        return 0;
+
+    ret = EVP_PKEY_public_check(pctx);
+    EVP_PKEY_CTX_free(pctx);
+
+    /* Negative return means no public validation for this key type - reject. */
+    return ret == 1;
+}

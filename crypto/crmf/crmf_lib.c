@@ -493,6 +493,12 @@ int OSSL_CRMF_MSGS_verify_popo(const OSSL_CRMF_MSGS *reqs,
             ERR_raise(ERR_LIB_CRMF, CRMF_R_POPO_MISSING_PUBLIC_KEY);
             return 0;
         }
+        /* Reject unusable keys (e.g. RSA e=1) before trusting the PoP signature. */
+        if (!ossl_x509_pubkey_check_public(X509_PUBKEY_get0(pubkey),
+                                          libctx, propq)) {
+            ERR_raise(ERR_LIB_CRMF, CRMF_R_POPO_MISSING_PUBLIC_KEY);
+            return 0;
+        }
         sig = req->popo->value.signature;
         if (sig->poposkInput != NULL) {
             /*
