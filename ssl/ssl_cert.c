@@ -541,8 +541,13 @@ static int ssl_verify_internal(SSL_CONNECTION *s, STACK_OF(X509) *sk, EVP_PKEY *
     X509_STORE_CTX_set_default(ctx, s->server ? "ssl_client" : "ssl_server");
     /*
      * Anything non-default in "s->param" should overwrite anything in the ctx.
+     * Fail closed on copy failure: otherwise hosts/email/ip may become NULL and
+     * check_id() treats that as "unset", silently skipping identity checks.
      */
-    X509_VERIFY_PARAM_set1(param, s->param);
+    if (!X509_VERIFY_PARAM_set1(param, s->param)) {
+        ERR_raise(ERR_LIB_SSL, ERR_R_X509_LIB);
+        goto end;
+    }
 
     if (s->verify_callback)
         X509_STORE_CTX_set_verify_cb(ctx, s->verify_callback);
