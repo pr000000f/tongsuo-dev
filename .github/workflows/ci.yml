@@ -335,15 +335,16 @@ jobs:
       working-directory: ./build
 
   external-test-pyca:
-    runs-on: ubuntu-latest
+    # Python 3.9 has no GitHub-hosted build for Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         RUST:
-          - 1.51.0
+          - '1.51.0'
         PYTHON:
-          - 3.9
+          - '3.9'
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
     - name: Configure OpenSSL
@@ -351,16 +352,16 @@ jobs:
     - name: make
       run: make -s -j4
     - name: Setup Python
-      uses: actions/setup-python@v2.2.2
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.PYTHON }}
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: ${{ matrix.RUST }}
-        override: true
-        default: true
+    - name: Setup Rust
+      env:
+        RUSTUP_TOOLCHAIN: ${{ matrix.RUST }}
+      run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
     - name: test external pyca
+      env:
+        RUSTUP_TOOLCHAIN: ${{ matrix.RUST }}
       run: make test TESTS="test_external_pyca" VERBOSE=1
 
   ntls-with-fips:

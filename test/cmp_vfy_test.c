@@ -13,8 +13,10 @@
 #include "../crypto/crmf/crmf_local.h" /* for manipulating POPO signature */
 #include "crypto/x509.h"
 #include <openssl/core_names.h>
+#include <openssl/dsa.h>
 #include <openssl/param_build.h>
 #include <openssl/params.h>
+#include <openssl/rsa.h>
 
 static const char *server_f;
 static const char *client_f;
