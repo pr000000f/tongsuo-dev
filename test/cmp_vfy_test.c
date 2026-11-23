@@ -1051,6 +1051,147 @@ void cleanup_tests(void)
     return;
 }
 
+static int allow_invalid_protection(const OSSL_CMP_CTX *ctx,
+                                    const OSSL_CMP_MSG *msg,
+                                    int invalid_protection, int arg)
+{
+    (void)ctx;
+    (void)msg;
+    (void)invalid_protection;
+    (void)arg;
+    return 1;
+}
+
+/* 1 if |want| is in |store|, 0 if not, -1 on error. */
+static int trusted_has_cert(X509_STORE *store, X509 *want)
+{
+    STACK_OF(X509) *certs;
+    int i, found = 0;
+
+    certs = X509_STORE_get1_all_certs(store);
+    if (certs == NULL)
+        return -1;
+    for (i = 0; i < sk_X509_num(certs); i++) {
+        if (X509_cmp(sk_X509_value(certs, i), want) == 0)
+            found = 1;
+    }
+    sk_X509_pop_free(certs, X509_free);
+    return found;
+}
+
+/* IP rejection carrying |root| in caPubs. protect=1 builds a real PBM. */
+static OSSL_CMP_MSG *make_ip_rejection_capubs(OSSL_CMP_CTX *srv, int protect)
+{
+    OSSL_CMP_PKISI *si = NULL;
+    STACK_OF(X509) *pubs = NULL;
+    OSSL_CMP_MSG *msg = NULL;
+    X509_ALGOR *alg = NULL;
+    ASN1_OBJECT *oid = NULL;
+
+    si = OSSL_CMP_STATUSINFO_new(OSSL_CMP_PKISTATUS_rejection, 0, "reject");
+    pubs = sk_X509_new_null();
+    if (si == NULL || pubs == NULL || !TEST_int_eq(sk_X509_push(pubs, root), 1))
+        goto end;
+    /*
+     * unprotectedErrors skips protection only for a rejection. The negative
+     * case then stamps a PBM algorithm identifier onto that unprotected body.
+     */
+    msg = ossl_cmp_certrep_new(srv, OSSL_CMP_PKIBODY_IP, 0, si,
+                               NULL, NULL, NULL, NULL, pubs, protect ? 0 : 1);
+    if (msg == NULL || protect)
+        goto end;
+
+    alg = X509_ALGOR_new();
+    oid = OBJ_dup(OBJ_nid2obj(NID_id_PasswordBasedMAC));
+    if (alg == NULL || oid == NULL
+            || !X509_ALGOR_set0(alg, oid, V_ASN1_UNDEF, NULL)) {
+        ASN1_OBJECT_free(oid);
+        X509_ALGOR_free(alg);
+        OSSL_CMP_MSG_free(msg);
+        msg = NULL;
+        goto end;
+    }
+    X509_ALGOR_free(msg->header->protectionAlg);
+    msg->header->protectionAlg = alg;
+
+ end:
+    OSSL_CMP_PKISI_free(si);
+    sk_X509_free(pubs);
+    return msg;
+}
+
+static int test_capubs_unprotected_rejection_not_trusted(void)
+{
+    OSSL_CMP_CTX *builder = NULL, *cl = NULL;
+    OSSL_CMP_MSG *msg = NULL;
+    X509_STORE *ts = NULL;
+    int ok = 0;
+
+    if (!TEST_ptr(builder = OSSL_CMP_CTX_new(libctx, NULL))
+            || !TEST_ptr(msg = make_ip_rejection_capubs(builder, 0)))
+        goto end;
+    ts = X509_STORE_new();
+    if (!TEST_ptr(cl = OSSL_CMP_CTX_new(libctx, NULL))
+            || !TEST_ptr(ts)
+            || !TEST_true(OSSL_CMP_CTX_set0_trusted(cl, ts))) {
+        X509_STORE_free(ts);
+        goto end;
+    }
+    ts = NULL; /* owned by cl */
+    if (!TEST_int_eq(ossl_cmp_msg_check_update(cl, msg,
+                                               allow_invalid_protection, 0), 1)
+            || !TEST_int_eq(trusted_has_cert(OSSL_CMP_CTX_get0_trusted(cl),
+                                             root), 0)
+            || !TEST_true(OSSL_CMP_CTX_reinit(cl))
+            || !TEST_int_eq(trusted_has_cert(OSSL_CMP_CTX_get0_trusted(cl),
+                                             root), 0))
+        goto end;
+    ok = 1;
+ end:
+    OSSL_CMP_MSG_free(msg);
+    OSSL_CMP_CTX_free(cl);
+    OSSL_CMP_CTX_free(builder);
+    return ok;
+}
+
+static int test_capubs_pbm_ok_is_trusted(void)
+{
+    static const unsigned char secret[] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+    OSSL_CMP_CTX *srv = NULL;
+    OSSL_CMP_CTX *cl = NULL;
+    OSSL_CMP_MSG *msg = NULL;
+    X509_STORE *ts = NULL;
+    int ok = 0;
+
+    if (!TEST_ptr(srv = OSSL_CMP_CTX_new(libctx, NULL))
+            || !TEST_true(OSSL_CMP_CTX_set1_secretValue(srv, secret,
+                                                        sizeof(secret)))
+            || !TEST_true(OSSL_CMP_CTX_set1_referenceValue(srv, secret,
+                                                           sizeof(secret)))
+            || !TEST_ptr(msg = make_ip_rejection_capubs(srv, 1)))
+        goto end;
+    ts = X509_STORE_new();
+    if (!TEST_ptr(cl = OSSL_CMP_CTX_new(libctx, NULL))
+            || !TEST_ptr(ts)
+            || !TEST_true(OSSL_CMP_CTX_set0_trusted(cl, ts))
+            || !TEST_true(OSSL_CMP_CTX_set1_secretValue(cl, secret,
+                                                        sizeof(secret)))) {
+        X509_STORE_free(ts);
+        goto end;
+    }
+    ts = NULL; /* owned by cl */
+    if (!TEST_int_eq(ossl_cmp_msg_check_update(cl, msg, NULL, 0), 1)
+            || !TEST_int_eq(trusted_has_cert(OSSL_CMP_CTX_get0_trusted(cl),
+                                             root), 1))
+        goto end;
+    ok = 1;
+ end:
+    OSSL_CMP_MSG_free(msg);
+    OSSL_CMP_CTX_free(cl);
+    OSSL_CMP_CTX_free(srv);
+    return ok;
+}
+
 #define USAGE "server.crt client.crt " \
     "EndEntity1.crt EndEntity2.crt " \
     "Root_CA.crt Intermediate_CA.crt " \
@@ -1166,6 +1307,8 @@ int setup_tests(void)
     ADD_TEST(test_validate_msg_unprotected_request);
 #endif
     ADD_TEST(test_validate_msg_mac_alg_protection_ok);
+    ADD_TEST(test_capubs_unprotected_rejection_not_trusted);
+    ADD_TEST(test_capubs_pbm_ok_is_trusted);
 #ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
     ADD_TEST(test_validate_msg_mac_alg_protection_missing);
     ADD_TEST(test_validate_msg_mac_alg_protection_wrong);
