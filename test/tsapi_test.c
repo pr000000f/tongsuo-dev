@@ -7,6 +7,12 @@
  * https://github.com/Tongsuo-Project/Tongsuo/blob/master/LICENSE.txt
  */
 
+#include "internal/deprecated.h"
+
+#include <string.h>
+#include <openssl/bn.h>
+#include <openssl/core_names.h>
+#include <openssl/ec.h>
 #include <openssl/tsapi.h>
 #include <openssl/evp.h>
 #include <openssl/sdf.h>
@@ -351,6 +357,91 @@ end:
 # endif
     return ok;
 }
+
+static EVP_PKEY *ec_pkey_from_generator(int nid, const unsigned char *priv,
+                                        size_t privlen)
+{
+    int ok = 0;
+    EC_KEY *ec = NULL;
+    EVP_PKEY *pkey = NULL;
+    const EC_GROUP *group;
+    const EC_POINT *generator;
+    BIGNUM *scalar = NULL;
+
+    ec = EC_KEY_new_by_curve_name(nid);
+    if (ec == NULL)
+        return NULL;
+
+    group = EC_KEY_get0_group(ec);
+    generator = group == NULL ? NULL : EC_GROUP_get0_generator(group);
+    if (generator == NULL || !EC_KEY_set_public_key(ec, generator))
+        goto end;
+
+    if (priv != NULL) {
+        scalar = BN_bin2bn(priv, (int)privlen, NULL);
+        if (scalar == NULL || !EC_KEY_set_private_key(ec, scalar))
+            goto end;
+    }
+
+    pkey = EVP_PKEY_new();
+    if (pkey == NULL || !EVP_PKEY_assign_EC_KEY(pkey, ec))
+        goto end;
+    ec = NULL;
+    ok = 1;
+end:
+    BN_free(scalar);
+    EC_KEY_free(ec);
+    if (!ok) {
+        EVP_PKEY_free(pkey);
+        pkey = NULL;
+    }
+    return pkey;
+}
+
+static int test_TSAPI_ECCref_oversize_rejected(void)
+{
+    int ok = 0;
+    unsigned char scalar[OSSL_ECCref_MAX_LEN + 1];
+    EVP_PKEY *sm2 = NULL, *p521 = NULL;
+    OSSL_ECCrefPublicKey *pub = NULL;
+    OSSL_ECCrefPrivateKey *priv = NULL;
+    BIGNUM *x = NULL;
+
+    memset(scalar, 0x11, sizeof(scalar));
+    scalar[0] = 0x01;
+
+    /* Public point fits in SM2; the scalar does not fit in K[64]. */
+    sm2 = ec_pkey_from_generator(NID_sm2, scalar, sizeof(scalar));
+    if (!TEST_ptr(sm2))
+        goto end;
+    pub = TSAPI_EVP_PKEY_get_ECCrefPublicKey(sm2);
+    priv = TSAPI_EVP_PKEY_get_ECCrefPrivateKey(sm2);
+    if (!TEST_ptr(pub) || !TEST_ptr_null(priv))
+        goto end;
+    OPENSSL_free(pub);
+    pub = NULL;
+    OPENSSL_free(priv);
+    priv = NULL;
+
+    p521 = ec_pkey_from_generator(NID_secp521r1, NULL, 0);
+    if (!TEST_ptr(p521))
+        goto end;
+    if (!TEST_true(EVP_PKEY_get_bn_param(p521, OSSL_PKEY_PARAM_EC_PUB_X, &x))
+            || !TEST_int_gt(BN_num_bytes(x), OSSL_ECCref_MAX_LEN))
+        goto end;
+    pub = TSAPI_EVP_PKEY_get_ECCrefPublicKey(p521);
+    if (!TEST_ptr_null(pub))
+        goto end;
+
+    ok = 1;
+end:
+    BN_free(x);
+    OPENSSL_free(pub);
+    OPENSSL_free(priv);
+    EVP_PKEY_free(p521);
+    EVP_PKEY_free(sm2);
+    return ok;
+}
 #endif
 
 #ifndef OPENSSL_NO_SM4
@@ -471,6 +562,7 @@ int setup_tests(void)
     ADD_TEST(test_TSAPI_SM2Verify);
     ADD_TEST(test_TSAPI_SM2Encrypt);
     ADD_TEST(test_TSAPI_SM2Decrypt);
+    ADD_TEST(test_TSAPI_ECCref_oversize_rejected);
 #endif
 #ifndef OPENSSL_NO_SM4
     ADD_TEST(test_TSAPI_SM4Encrypt);

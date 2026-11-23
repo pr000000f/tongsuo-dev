@@ -203,7 +203,7 @@ EVP_PKEY *TSAPI_EVP_PKEY_new_from_ECCrefKey(const OSSL_ECCrefPublicKey *pubkey,
     BN_CTX *ctx = NULL;
     EVP_PKEY *pkey = NULL;
     BIGNUM *x = NULL, *y = NULL;
-    int bytes;
+    int bytes = 0;
 
     if (pubkey == NULL)
         return NULL;
@@ -219,7 +219,10 @@ EVP_PKEY *TSAPI_EVP_PKEY_new_from_ECCrefKey(const OSSL_ECCrefPublicKey *pubkey,
     if (!EC_KEY_set_group(eckey, group))
         goto end;
 
-    bytes = (pubkey->bits + 7) / 8;
+    /* GM/T 0018 caps bits at 512. Reject before it becomes a read length. */
+    if (pubkey->bits == 0 || pubkey->bits > OSSL_ECCref_MAX_BITS)
+        goto end;
+    bytes = (int)((pubkey->bits + 7) / 8);
 
     ctx = BN_CTX_new();
     if (ctx == NULL)
@@ -239,7 +242,9 @@ EVP_PKEY *TSAPI_EVP_PKEY_new_from_ECCrefKey(const OSSL_ECCrefPublicKey *pubkey,
         goto end;
 
     if (privkey) {
-        bytes = (privkey->bits + 7) / 8;
+        if (privkey->bits == 0 || privkey->bits > OSSL_ECCref_MAX_BITS)
+            goto end;
+        bytes = (int)((privkey->bits + 7) / 8);
         if (BN_bin2bn(privkey->K + sizeof(privkey->K) - bytes, bytes, x) == NULL)
             goto end;
 
@@ -310,9 +315,13 @@ OSSL_ECCrefPublicKey *TSAPI_EVP_PKEY_get_ECCrefPublicKey(const EVP_PKEY *pkey)
 
     outkey->bits = EVP_PKEY_get_bits(pkey);
 
-    if (BN_bn2bin(x, outkey->x + sizeof(outkey->x) - BN_num_bytes(x)) < 0)
-        goto end;
-    if (BN_bn2bin(y, outkey->y + sizeof(outkey->y) - BN_num_bytes(y)) < 0)
+    /*
+     * BN_bn2binpad writes the whole ECCref field, high bytes zero. It returns
+     * -1 when the coordinate is longer than OSSL_ECCref_MAX_LEN, so the old
+     * "field + len - BN_num_bytes" pointer cannot step in front of the object.
+     */
+    if (BN_bn2binpad(x, outkey->x, (int)sizeof(outkey->x)) < 0
+            || BN_bn2binpad(y, outkey->y, (int)sizeof(outkey->y)) < 0)
         goto end;
 
     ok = 1;
@@ -350,7 +359,7 @@ OSSL_ECCrefPrivateKey *TSAPI_EVP_PKEY_get_ECCrefPrivateKey(const EVP_PKEY *pkey)
 
     outkey->bits = EVP_PKEY_get_bits(pkey);
 
-    if (BN_bn2bin(priv, outkey->K + sizeof(outkey->K) - BN_num_bytes(priv)) < 0)
+    if (BN_bn2binpad(priv, outkey->K, (int)sizeof(outkey->K)) < 0)
         goto end;
 
     ok = 1;
